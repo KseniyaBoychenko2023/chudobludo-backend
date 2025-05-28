@@ -5,12 +5,17 @@ module.exports = function (req, res, next) {
         const authHeader = req.header('Authorization');
         console.log('Auth middleware - Authorization header:', authHeader);
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            throw new Error('No token provided');
+            console.log('Auth middleware - No token provided');
+            return res.status(401).json({ message: 'Токен не предоставлен' });
         }
         const token = authHeader.replace('Bearer ', '');
         console.log('Auth middleware - Token:', token);
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         console.log('Auth middleware - Decoded:', decoded);
+        if (!decoded.id) {
+            console.log('Auth middleware - No ID in decoded token');
+            return res.status(401).json({ message: 'Неверный токен' });
+        }
         req.user = decoded;
         next();
     } catch (err) {

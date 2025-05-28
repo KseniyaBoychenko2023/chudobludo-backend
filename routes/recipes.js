@@ -7,15 +7,21 @@ const auth = require('../middleware/auth');
 // Создание рецепта
 router.post('/', auth, async (req, res) => {
     try {
-        console.log('POST /api/recipes - Request body:', req.body, 'Author ID:', req.user.id);
-        const recipe = new Recipe({
+        console.log('POST /api/recipes - Request body:', req.body, 'Author ID:', req.user?.id);
+        if (!req.user?.id) {
+            console.log('No user ID in req.user');
+            return res.status(401).json({ message: 'Пользователь не авторизован' });
+        }
+        const recipeData = {
             ...req.body,
-            author: req.user.id
-        });
+            author: req.user.id,
+            ingredientCount: req.body.ingredients?.length || 0 // Вычисляем ingredientCount
+        };
+        const recipe = new Recipe(recipeData);
         await recipe.save();
         res.status(201).json(recipe);
     } catch (err) {
-        console.error('POST /api/recipes - Error:', err);
+        console.error('POST /api/recipes - Error:', err.message, err.stack);
         res.status(400).json({ message: err.message });
     }
 });
@@ -23,11 +29,15 @@ router.post('/', auth, async (req, res) => {
 // Получение рецептов пользователя
 router.get('/user/:userId', auth, async (req, res) => {
     try {
-        console.log(`GET /api/users/${req.params.userId}/recipes - Author ID:`, req.user.id);
+        console.log(`GET /api/users/${req.params.userId}/recipes - Author ID:`, req.user?.id);
+        if (!mongoose.Types.ObjectId.isValid(req.params.userId)) {
+            console.log(`Invalid userId: ${req.params.userId}`);
+            return res.status(400).json({ message: 'Неверный ID пользователя' });
+        }
         const recipes = await Recipe.find({ author: req.params.userId });
         res.json(recipes);
     } catch (err) {
-        console.error('GET /api/users/recipes - Error:', err);
+        console.error('GET /api/users/recipes - Error:', err.message, err.stack);
         res.status(500).json({ message: err.message });
     }
 });
@@ -35,7 +45,11 @@ router.get('/user/:userId', auth, async (req, res) => {
 // Удаление рецепта
 router.delete('/:id', auth, async (req, res) => {
     try {
-        console.log(`DELETE /api/recipes/${req.params.id} - Author ID:`, req.user.id);
+        console.log(`DELETE /api/recipes/${req.params.id} - Author ID:`, req.user?.id);
+        if (!req.user?.id) {
+            console.log('No user ID in req.user');
+            return res.status(401).json({ message: 'Пользователь не авторизован' });
+        }
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
             console.log(`Invalid recipeId: ${req.params.id}`);
             return res.status(400).json({ message: 'Неверный ID рецепта' });
@@ -58,7 +72,7 @@ router.delete('/:id', auth, async (req, res) => {
         console.log(`Recipe ${req.params.id} deleted`);
         res.json({ message: 'Рецепт удалён' });
     } catch (err) {
-        console.error(`DELETE /api/recipes/${req.params.id} - Error:`, err);
+        console.error(`DELETE /api/recipes/${req.params.id} - Error:`, err.message, err.stack);
         res.status(500).json({ message: err.message });
     }
 });
