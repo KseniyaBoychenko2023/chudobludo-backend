@@ -12,11 +12,11 @@ module.exports = function (req, res, next) {
         console.log('Auth middleware - Token:', token);
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         console.log('Auth middleware - Decoded:', decoded);
-        if (!decoded.id) {
-            console.log('Auth middleware - No ID in decoded token');
+        if (!decoded.user?.id) { // Извлекаем user.id
+            console.log('Auth middleware - No user ID in decoded token');
             return res.status(401).json({ message: 'Неверный токен' });
         }
-        req.user = decoded;
+        req.user = { id: decoded.user.id }; // Устанавливаем req.user.id
         next();
     } catch (err) {
         console.error('Auth middleware - Error:', err.message);
