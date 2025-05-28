@@ -4,69 +4,60 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-// Регистрация нового пользователя
 router.post('/register', async (req, res) => {
     const { username, email, password } = req.body;
     try {
-        // Проверяем, существует ли пользователь с таким email
         let user = await User.findOne({ email });
         if (user) {
-            return res.status(400).json({ message: 'Пользователь с таким email уже существует' });
+            return res.status(400).json({ message: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СЃ С‚Р°РєРёРј email СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚' });
         }
 
-        // Проверяем обязательные поля
         if (!username || !email || !password) {
-            return res.status(400).json({ message: 'Все поля обязательны' });
+            return res.status(400).json({ message: 'Р’СЃРµ РїРѕР»СЏ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹!' });
         }
 
-        // Создаём нового пользователя
         user = new User({ username, email, password });
         await user.save();
 
-        // Создаём payload для токена
         const payload = {
             user: {
                 id: user.id
             }
         };
 
-        // Генерируем токен
         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' }, (err, token) => {
             if (err) throw err;
             res.json({ token, userId: user._id });
         });
     } catch (err) {
-        console.error('Ошибка регистрации:', err.message);
-        res.status(500).json({ message: 'Ошибка сервера' });
+        console.error('РћС€РёР±РєР° СЂРµРіРёСЃС‚СЂР°С†РёРё:', err.message);
+        res.status(500).json({ message: 'РћС€РёР±РєР° СЃРµСЂРІРµСЂР°' });
     }
 });
 
-// Вход пользователя
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
     try {
         const user = await User.findOne({ email });
         if (!user) {
-            return res.status(400).json({ message: 'Неверные учетные данные' });
+            return res.status(400).json({ message: 'РќРµРІРµСЂРЅС‹Рµ СѓС‡РµС‚РЅС‹Рµ РґР°РЅРЅС‹Рµ' });
         }
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
-            return res.status(400).json({ message: 'Неверные учетные данные' });
+            return res.status(400).json({ message: 'РќРµРІРµСЂРЅС‹Рµ СѓС‡РµС‚РЅС‹Рµ РґР°РЅРЅС‹Рµ' });
         }
-        // Создаём payload для токена
         const payload = {
             user: {
                 id: user.id
             }
         };
-        // Генерируем токен
         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' }, (err, token) => {
             if (err) throw err;
             res.json({ token, userId: user._id });
         });
     } catch (err) {
         console.error(err.message);
-        res.status(500).send('Ошибка сервера');
+        res.status(500).send('РћС€РёР±РєР° СЃРµСЂРІРµСЂР°');
     }
 });
 

@@ -1,7 +1,5 @@
-// Подключаем mongoose
 const mongoose = require('mongoose');
 
-// Определяем схему рецепта
 const recipeSchema = new mongoose.Schema({
     title: { type: String, required: true },
     category: { type: String, required: true },
@@ -16,9 +14,8 @@ const recipeSchema = new mongoose.Schema({
         description: { type: String, required: true },
         image: { type: String }
     }],
-    author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // Поле author
+    author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     createdAt: { type: Date, default: Date.now }
 });
 
-// Экспортируем модель
 module.exports = mongoose.model('Recipe', recipeSchema);

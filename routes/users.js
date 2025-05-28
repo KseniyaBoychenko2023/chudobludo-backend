@@ -3,7 +3,6 @@ const router = express.Router();
 const Recipe = require('../models/Recipe');
 const auth = require('../middleware/auth');
 
-// Получить рецепты пользователя
 router.get('/:id/recipes', auth, async (req, res) => {
     try {
         if (req.user.id !== req.params.id) {
