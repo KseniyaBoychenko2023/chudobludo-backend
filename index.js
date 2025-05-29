@@ -1,4 +1,3 @@
-// C:\Users\Kseniia\Desktop\pract\Backend\chudobludo-backend\index.js
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -18,7 +17,7 @@ console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'Not set');
 
 // CORS
 app.use(cors({
-    origin: ['http://localhost:8080', 'https://chudobludo.fun', 'https://chudobludo.ru', '*'],
+    origin: '*', // Временно для теста
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
@@ -27,15 +26,10 @@ app.use(cors({
 
 // Парсинг JSON
 app.use(express.json({ limit: '50kb' }));
-app.use(express.raw({ type: 'application/json', limit: '50kb' })); // Дополнительная проверка
 
 // Логирование запросов
 app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - Origin: ${req.headers.origin} - User-Agent: ${req.headers['user-agent']} - Raw Body:`, req.body);
-    if (req.method === 'POST' && !req.body) {
-        console.log('Body is empty or not parsed');
-        return res.status(400).json({ message: 'Тело запроса отсутствует' });
-    }
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - Origin: ${req.headers.origin} - User-Agent: ${req.headers['user-agent']} - Body:`, req.body);
     next();
 });
 
