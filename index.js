@@ -1,3 +1,4 @@
+// C:\Users\Kseniia\Desktop\pract\Backend\chudobludo-backend\index.js
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -17,7 +18,7 @@ console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'Not set');
 
 // CORS
 app.use(cors({
-    origin: '*', // Временно для теста
+    origin: ['http://localhost:8080', 'https://chudobludo.fun', 'https://chudobludo.ru'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
