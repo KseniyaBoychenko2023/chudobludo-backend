@@ -1,3 +1,4 @@
+// C:\Users\Kseniia\Desktop\pract\Backend\chudobludo-backend\index.js
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -10,14 +11,12 @@ dotenv.config();
 
 const app = express();
 
-// Проверка версии Node.js
+// Логирование
 console.log('Node.js version:', process.version);
-
-// Логирование окружения
 console.log('MONGO_URI:', process.env.MONGO_URI ? 'Set' : 'Not set');
 console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'Not set');
 
-// Настройка CORS
+// CORS
 app.use(cors({
     origin: ['http://localhost:8080', 'https://chudobludo.fun', 'https://chudobludo.ru'],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -27,6 +26,7 @@ app.use(cors({
 
 // Парсинг JSON
 app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: true }));
 
 // Логирование запросов
 app.use((req, res, next) => {
