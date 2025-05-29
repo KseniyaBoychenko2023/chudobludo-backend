@@ -18,19 +18,24 @@ console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'Not set');
 
 // CORS
 app.use(cors({
-    origin: ['http://localhost:8080', 'https://chudobludo.fun', 'https://chudobludo.ru'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    origin: ['http://localhost:8080', 'https://chudobludo.fun', 'https://chudobludo.ru', '*'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
+    credentials: true,
+    optionsSuccessStatus: 204
 }));
 
 // Парсинг JSON
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50kb' }));
+app.use(express.raw({ type: 'application/json', limit: '50kb' })); // Дополнительная проверка
 
 // Логирование запросов
 app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - Body:`, req.body);
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - Origin: ${req.headers.origin} - User-Agent: ${req.headers['user-agent']} - Raw Body:`, req.body);
+    if (req.method === 'POST' && !req.body) {
+        console.log('Body is empty or not parsed');
+        return res.status(400).json({ message: 'Тело запроса отсутствует' });
+    }
     next();
 });
 
@@ -52,7 +57,8 @@ app.get('/', (req, res) => {
 app.use((err, req, res, next) => {
     console.error('Server error:', err.message, err.stack);
     if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-        return res.status(400).json({ message: 'Invalid JSON payload' });
+        console.log('JSON parse error:', err.message);
+        return res.status(400).json({ message: 'Ошибка парсинга JSON', details: err.message });
     }
     res.status(500).json({ message: 'Internal Server Error', error: err.message });
 });

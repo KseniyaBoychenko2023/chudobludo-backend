@@ -10,16 +10,15 @@ router.post('/register', async (req, res) => {
     try {
         const { username, email, password } = req.body;
         if (!username || !email || !password) {
-            return res.status(400).json({ message: 'Все поля обязательны!' });
+            return res.status(400).json({ message: 'Все поля обязательны' });
         }
         const user = await User.findOne({ email });
         if (user) {
-            return res.status(400).json({ message: 'Пользователь с таким email уже существует' });
+            return res.status(400).json({ message: 'Пользователь уже существует' });
         }
         const newUser = new User({ username, email, password });
         await newUser.save();
-        const payload = { user: { id: newUser.id } };
-        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+        const token = jwt.sign({ user: { id: newUser.id } }, process.env.JWT_SECRET, { expiresIn: '1h' });
         res.json({ token, userId: newUser._id });
     } catch (err) {
         console.error('Register error:', err.message, err.stack);
@@ -42,8 +41,7 @@ router.post('/login', async (req, res) => {
         if (!isMatch) {
             return res.status(400).json({ message: 'Неверные учетные данные' });
         }
-        const payload = { user: { id: user.id } };
-        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+        const token = jwt.sign({ user: { id: user.id } }, process.env.JWT_SECRET, { expiresIn: '1h' });
         res.json({ token, userId: user._id });
     } catch (err) {
         console.error('Login error:', err.message, err.stack);
