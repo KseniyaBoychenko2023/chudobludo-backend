@@ -15,7 +15,7 @@ router.post('/', auth, async (req, res) => {
         const recipeData = {
             ...req.body,
             author: req.user.id,
-            ingredientCount: req.body.ingredients?.length || 0 // Вычисляем ingredientCount
+            ingredientCount: req.body.ingredients?.length || 0
         };
         const recipe = new Recipe(recipeData);
         await recipe.save();
