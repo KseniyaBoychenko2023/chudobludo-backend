@@ -29,7 +29,18 @@ const recipeSchema = new mongoose.Schema({
         type: Number, 
         required: true,
         min: [0, 'Количество не может быть отрицательным'],
-        max: [1000, 'Количество не может превышать 1000']
+        max: [1000, 'Количество не может превышать 1000'],
+        validate: {
+            validator: function(value) {
+                const index = this.ingredientQuantities.indexOf(value);
+                const unit = this.ingredientUnits[index];
+                if (unit === 'пв') {
+                    return value === 0;
+                }
+                return true;
+            },
+            message: 'Для единицы измерения "по вкусу" количество должно быть 0'
+        }
     }],
     ingredientUnits: [{
         type: String,
