@@ -31,6 +31,11 @@ const recipeSchema = new mongoose.Schema({
         min: [0, 'Количество не может быть отрицательным'],
         max: [1000, 'Количество не может превышать 1000']
     }],
+    ingredientUnits: [{
+        type: String,
+        required: true,
+        enum: ['г', 'кг', 'мл', 'л', 'шт', 'ст', 'стл', 'чл', 'пв']
+    }],
     ingredientCount: { type: Number },  
     image: { type: String },
     steps: [{
