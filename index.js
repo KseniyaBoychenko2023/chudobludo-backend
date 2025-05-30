@@ -18,7 +18,7 @@ console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'Not set');
 
 // CORS
 app.use(cors({
-    origin: ['http://localhost:8080', 'https://chudobludo.fun', 'https://chudobludo.ru'],
+    origin: ['http://localhost:8080', 'https://chudobludo.fun'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
