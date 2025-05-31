@@ -18,7 +18,7 @@ const recipeSchema = new mongoose.Schema({
     description: { 
         type: String, 
         required: true,
-        maxlength: [1000, 'Описание рецепта не должно превышать 1000 символов']
+        maxlength: [1000, 'Описание не должно превышать 1000 символов']
     },
     servings: { 
         type: Number, 
@@ -71,5 +71,16 @@ const recipeSchema = new mongoose.Schema({
     author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     createdAt: { type: Date, default: Date.now }
 });
+
+recipeSchema.pre('validate', function(next) {
+    if (this.ingredients.length !== this.ingredientQuantities.length ||
+        this.ingredients.length !== this.ingredientUnits.length) {
+        next(new Error('Длина массивов ingredients, ingredientQuantities и ingredientUnits должна совпадать'));
+    } else {
+        next();
+    }
+});
+
+recipeSchema.index({ author: 1 });
 
 module.exports = mongoose.model('Recipe', recipeSchema);
