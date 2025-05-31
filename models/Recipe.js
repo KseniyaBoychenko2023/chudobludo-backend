@@ -1,7 +1,11 @@
 const mongoose = require('mongoose');
 
 const recipeSchema = new mongoose.Schema({
-    title: { type: String, required: true },
+    title: { 
+        type: String, 
+        required: true,
+        maxlength: [50, 'Название рецепта не должно превышать 50 символов']
+    },
     categories: [{ 
         type: String, 
         required: true,
@@ -11,7 +15,11 @@ const recipeSchema = new mongoose.Schema({
             'Горячее блюдо', 'Закуски', 'Десерт', 'Напитки'
         ]
     }],
-    description: { type: String, required: true },
+    description: { 
+        type: String, 
+        required: true,
+        maxlength: [1000, 'Описание рецепта не должно превышать 1000 символов']
+    },
     servings: { 
         type: Number, 
         required: true,
@@ -24,7 +32,11 @@ const recipeSchema = new mongoose.Schema({
         min: [1, 'Время приготовления должно быть не менее 1 минуты'],
         max: [100000, 'Время приготовления не может превышать 100000 минут']
     },
-    ingredients: [{ type: String, required: true }],
+    ingredients: [{ 
+        type: String, 
+        required: true,
+        maxlength: [50, 'Название ингредиента не должно превышать 50 символов']
+    }],
     ingredientQuantities: [{ 
         type: Number, 
         required: true,
@@ -47,10 +59,13 @@ const recipeSchema = new mongoose.Schema({
         required: true,
         enum: ['г', 'кг', 'мл', 'л', 'шт', 'ст', 'стл', 'чл', 'пв']
     }],
-    ingredientCount: { type: Number },  
     image: { type: String },
     steps: [{
-        description: { type: String, required: true },
+        description: { 
+            type: String, 
+            required: true,
+            maxlength: [1000, 'Описание шага не должно превышать 1000 символов']
+        },
         image: { type: String }
     }],
     author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
