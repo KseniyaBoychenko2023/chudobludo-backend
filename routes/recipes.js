@@ -3,26 +3,101 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const Recipe = require('../models/Recipe');
 const auth = require('../middleware/auth');
+const multer = require('multer');
+const cloudinary = require('../cloudinary');
+
+// Настройка multer для хранения файлов в памяти
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 МБ
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Только изображения JPEG или PNG'), false);
+    }
+  }
+});
 
 // Создание рецепта
-router.post('/', auth, async (req, res) => {
+router.post('/', 
+  auth,
+  upload.fields([
+    { name: 'recipeImage', maxCount: 1 },
+    { name: 'stepImages', maxCount: 50 }
+  ]),
+  async (req, res) => {
     try {
-        console.log('POST /api/recipes - Request body:', req.body, 'Author ID:', req.user?.id);
-        if (!req.user?.id) {
-            console.log('No user ID in req.user');
-            return res.status(401).json({ message: 'Пользователь не авторизован' });
+      console.log('POST /api/recipes - Request body:', req.body, 'Files:', req.files, 'Author ID:', req.user?.id);
+      if (!req.user?.id) {
+        console.log('No user ID in req.user');
+        return res.status(401).json({ message: 'Пользователь не авторизован' });
+      }
+
+      // Парсим JSON-данные из строки (если они отправлены как строка)
+      let recipeData = req.body;
+      if (typeof recipeData === 'string') {
+        recipeData = JSON.parse(recipeData);
+      }
+
+      // Загрузка изображения рецепта в Cloudinary
+      let recipeImageUrl = '';
+      if (req.files.recipeImage && req.files.recipeImage[0]) {
+        const result = await new Promise((resolve, reject) => {
+          cloudinary.uploader.upload_stream(
+            { resource_type: 'image', folder: 'recipes' },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          ).end(req.files.recipeImage[0].buffer);
+        });
+        recipeImageUrl = result.secure_url;
+      }
+
+      // Загрузка изображений шагов в Cloudinary
+      const stepImageUrls = [];
+      if (req.files.stepImages) {
+        for (const file of req.files.stepImages) {
+          const result = await new Promise((resolve, reject) => {
+            cloudinary.uploader.upload_stream(
+              { resource_type: 'image', folder: 'recipe_steps' },
+              (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+              }
+            ).end(file.buffer);
+          });
+          stepImageUrls.push(result.secure_url);
         }
-        const recipeData = {
-            ...req.body,
-            author: req.user.id,
-            ingredientCount: req.body.ingredients?.length || 0
-        };
-        const recipe = new Recipe(recipeData);
-        await recipe.save();
-        res.status(201).json(recipe);
+      }
+
+      // Формируем объект рецепта
+      const recipe = new Recipe({
+        title: recipeData.title,
+        categories: recipeData.categories,
+        description: recipeData.description,
+        servings: parseInt(recipeData.servings),
+        cookingTime: parseInt(recipeData.cookingTime),
+        ingredients: recipeData.ingredients,
+        ingredientQuantities: recipeData.ingredientQuantities.map(q => parseFloat(q)),
+        ingredientUnits: recipeData.ingredientUnits,
+        image: recipeImageUrl,
+        steps: recipeData.steps.map((step, index) => ({
+          description: step.description,
+          image: stepImageUrls[index] || ''
+        })),
+        author: req.user.id,
+        ingredientCount: recipeData.ingredients?.length || 0
+      });
+
+      await recipe.save();
+      res.status(201).json(recipe);
     } catch (err) {
-        console.error('POST /api/recipes - Error:', err.message, err.stack);
-        res.status(400).json({ message: err.message });
+      console.error('POST /api/recipes - Error:', err.message, err.stack);
+      res.status(400).json({ message: err.message });
     }
 });
 
