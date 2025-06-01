@@ -3,6 +3,8 @@ const router = express.Router();
 const Recipe = require('../models/Recipe');
 const auth = require('../middleware/auth');
 
+const User = require('../models/User');
+
 router.get('/:id/recipes', auth, async (req, res) => {
     try {
         if (req.user.id !== req.params.id) {
@@ -13,6 +15,23 @@ router.get('/:id/recipes', auth, async (req, res) => {
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
+});
+
+router.get('/:id', auth, async (req, res) => {
+  try {
+    // Проверяем, что юзер запрашивает собственные данные
+    if (req.user.id !== req.params.id) {
+      return res.status(403).json({ message: 'Доступ запрещён' });
+    }
+    const user = await User.findById(req.params.id).select('username email createdRecipes');
+    if (!user) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+    return res.json({ username: user.username, email: user.email, recipeCount: user.createdRecipes.length });
+  } catch (err) {
+    console.error('GET /api/users/:id — Error:', err.message);
+    return res.status(500).json({ message: 'Ошибка сервера' });
+  }
 });
 
 module.exports = router; 
