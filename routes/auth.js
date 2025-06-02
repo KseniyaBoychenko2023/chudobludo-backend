@@ -40,12 +40,36 @@ router.post('/login', async (req, res) => {
         if (!isMatch) {
             return res.status(400).json({ message: 'Неверные учетные данные' });
         }
-        const isAdmin = code && code === process.env.CODE_FOR_ADMIN;
+
+        // Отладка значений
+        console.log('User from DB:', { email, isAdmin: user.isAdmin });
+        console.log('Admin code check:', { code, expected: process.env.CODE_FOR_ADMIN });
+
+        // Проверяем, является ли пользователь админом
+        let isAdmin = user.isAdmin; // Базовая роль из базы данных
+
+        if (code) { // Если передан код, проверяем его
+            if (!process.env.CODE_FOR_ADMIN) {
+                console.error('CODE_FOR_ADMIN is not set in environment variables');
+                return res.status(500).json({ message: 'Ошибка сервера: код админа не настроен' });
+            }
+            const isCodeValid = code.trim() === process.env.CODE_FOR_ADMIN.trim();
+            console.log('Code validation result:', isCodeValid);
+            if (isCodeValid && user.isAdmin) {
+                isAdmin = true;
+            } else if (isCodeValid && !user.isAdmin) {
+                return res.status(403).json({ message: 'Код верный, но у пользователя нет прав администратора' });
+            } else {
+                return res.status(403).json({ message: 'Неверный код администратора' });
+            }
+        }
+
         const token = jwt.sign(
             { user: { id: user.id, isAdmin } }, // Добавляем isAdmin в токен
             process.env.JWT_SECRET,
             { expiresIn: '1h' }
         );
+        console.log('Response data:', { token, userId: user._id, isAdmin });
         res.json({ token, userId: user._id, isAdmin });
     } catch (err) {
         console.error('Login error:', err.message, err.stack);
