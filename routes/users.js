@@ -27,7 +27,7 @@ router.get('/:id', auth, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
-    return res.json({ username: user.username, email: user.email, recipeCount: user.createdRecipes.length });
+    return res.json({ username: user.username, email: user.email, recipeCount: user.createdRecipes.length, isAdmin: user.isAdmin });
   } catch (err) {
     console.error('GET /api/users/:id — Error:', err.message);
     return res.status(500).json({ message: 'Ошибка сервера' });

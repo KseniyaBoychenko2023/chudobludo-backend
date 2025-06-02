@@ -16,7 +16,10 @@ module.exports = function (req, res, next) {
             console.log('Auth middleware - No user ID in decoded token');
             return res.status(401).json({ message: 'Неверный токен' });
         }
-        req.user = { id: decoded.user.id }; // Устанавливаем req.user.id
+        req.user = { 
+            id: decoded.user.id,
+            isAdmin: decoded.user.isAdmin || false // Извлекаем isAdmin из токена
+        };
         next();
     } catch (err) {
         console.error('Auth middleware - Error:', err.message);

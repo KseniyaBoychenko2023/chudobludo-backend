@@ -69,7 +69,12 @@ const recipeSchema = new mongoose.Schema({
         image: { type: String }
     }],
     author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    createdAt: { type: Date, default: Date.now }
+    createdAt: { type: Date, default: Date.now },
+    status: { 
+        type: String, 
+        enum: ['pending', 'published'], 
+        default: 'pending' 
+    }
 });
 
 recipeSchema.pre('validate', function(next) {

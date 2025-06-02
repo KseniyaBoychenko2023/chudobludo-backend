@@ -134,6 +134,7 @@ router.post(
                     image: stepImageUrls[index] || '',
                 })),
                 author: req.user.id,
+                status: 'pending'
             });
 
             await recipe.save();
@@ -156,7 +157,7 @@ router.post(
 
 router.get('/user/:userId', auth, async (req, res) => {
     try {
-        console.log(`GET /api/users/${req.params.userId}/recipes - Author ID:`, req.user?.id);
+        console.log(`GET /api/recipes/user/${req.params.userId} - Author ID:`, req.user?.id);
         if (!mongoose.Types.ObjectId.isValid(req.params.userId)) {
             console.log(`Invalid userId: ${req.params.userId}`);
             return res.status(400).json({ message: 'Неверный ID пользователя' });
@@ -164,7 +165,26 @@ router.get('/user/:userId', auth, async (req, res) => {
         const recipes = await Recipe.find({ author: req.params.userId });
         res.json(recipes);
     } catch (err) {
-        console.error('GET /api/users/recipes - Error:', err.message, err.stack);
+        console.error('GET /api/recipes/user - Error:', err.message, err.stack);
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/user/all', auth, async (req, res) => {
+    try {
+        console.log(`GET /api/recipes/user/all - Author ID:`, req.user?.id);
+        if (!req.user.isAdmin) {
+            console.log(`User ${req.user.id} is not an admin`);
+            return res.status(403).json({ message: 'Только администраторы могут просматривать все рецепты' });
+        }
+        const status = req.query.status;
+        if (!['pending', 'published'].includes(status)) {
+            return res.status(400).json({ message: 'Неверный статус' });
+        }
+        const recipes = await Recipe.find({ status: status });
+        res.json(recipes);
+    } catch (err) {
+        console.error('GET /api/recipes/user/all - Error:', err.message, err.stack);
         res.status(500).json({ message: err.message });
     }
 });
@@ -219,6 +239,39 @@ router.delete('/:id', auth, async (req, res) => {
         res.json({ message: 'Рецепт удалён' });
     } catch (err) {
         console.error(`DELETE /api/recipes/${req.params.id} - Error:`, err.message, err.stack);
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.put('/:id/approve', auth, async (req, res) => {
+    try {
+        console.log(`PUT /api/recipes/${req.params.id}/approve - Author ID:`, req.user?.id);
+        if (!req.user?.id) {
+            console.log('No user ID in req.user');
+            return res.status(401).json({ message: 'Пользователь не авторизован' });
+        }
+        if (!req.user.isAdmin) {
+            console.log(`User ${req.user.id} is not an admin`);
+            return res.status(403).json({ message: 'Только администраторы могут одобрять рецепты' });
+        }
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            console.log(`Invalid recipeId: ${req.params.id}`);
+            return res.status(400).json({ message: 'Неверный ID рецепта' });
+        }
+        const recipe = await Recipe.findById(req.params.id);
+        if (!recipe) {
+            console.log(`Recipe ${req.params.id} not found`);
+            return res.status(404).json({ message: 'Рецепт не найден' });
+        }
+        if (recipe.status === 'published') {
+            return res.status(400).json({ message: 'Рецепт уже опубликован' });
+        }
+        recipe.status = 'published';
+        await recipe.save();
+        console.log(`Recipe ${req.params.id} approved and set to published`);
+        res.json({ message: 'Рецепт одобрен', recipe });
+    } catch (err) {
+        console.error(`PUT /api/recipes/${req.params.id}/approve - Error:`, err.message, err.stack);
         res.status(500).json({ message: err.message });
     }
 });
