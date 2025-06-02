@@ -5,6 +5,7 @@ const Recipe = require('../models/Recipe');
 const auth = require('../middleware/auth');
 const multer = require('multer');
 const cloudinary = require('../cloudinary');
+const User = require('../models/User'); // Добавляем импорт модели User
 
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -136,6 +137,15 @@ router.post(
             });
 
             await recipe.save();
+
+            // Добавляем ID рецепта в массив createdRecipes пользователя
+            await User.findByIdAndUpdate(
+                req.user.id,
+                { $push: { createdRecipes: recipe._id } },
+                { new: true }
+            );
+            console.log(`Recipe ${recipe._id} added to user's createdRecipes`);
+
             res.status(201).json(recipe);
         } catch (err) {
             console.error('POST /api/recipes - Error:', err.message, err.stack);
@@ -195,6 +205,16 @@ router.delete('/:id', auth, async (req, res) => {
             }
         }
         await Recipe.deleteOne({ _id: req.params.id });
+
+        // Удаляем ID рецепта из массива createdRecipes пользователя
+        await User.findByIdAndUpdate(
+            req.user.id,
+            { $pull: { createdRecipes: req.params.id } },
+            { new: true }
+        );
+        console.log(`Recipe ${req.params.id} removed from user's createdRecipes`);
+
+
         console.log(`Recipe ${req.params.id} deleted`);
         res.json({ message: 'Рецепт удалён' });
     } catch (err) {
