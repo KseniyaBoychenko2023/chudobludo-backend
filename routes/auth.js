@@ -46,8 +46,7 @@ router.post('/login', async (req, res) => {
         console.log('Admin code check:', { code, expected: process.env.CODE_FOR_ADMIN });
 
         // Проверяем, является ли пользователь админом
-        let isAdmin = user.isAdmin; // Базовая роль из базы данных
-
+        let isAdmin = false; // По умолчанию всегда false, если код не введён
         if (code) { // Если передан код, проверяем его
             if (!process.env.CODE_FOR_ADMIN) {
                 console.error('CODE_FOR_ADMIN is not set in environment variables');
