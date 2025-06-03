@@ -19,8 +19,9 @@ router.get('/:id/recipes', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    // Проверяем, что юзер запрашивает собственные данные
-    if (req.user.id !== req.params.id) {
+    // Разрешаем доступ либо самому пользователю, либо администратору
+    if (req.user.id !== req.params.id && !req.user.isAdmin) {
+      console.log(`Access denied for user ${req.user.id} (isAdmin: ${req.user.isAdmin}) to fetch user ${req.params.id}`);
       return res.status(403).json({ message: 'Доступ запрещён' });
     }
     const user = await User.findById(req.params.id).select('username email createdRecipes');
