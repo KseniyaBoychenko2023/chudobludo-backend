@@ -164,7 +164,7 @@ router.get('/user/all', auth, async (req, res) => {
         }
 
         const status = req.query.status;
-        if (!['pending', 'published'].includes(status)) {
+        if (!['pending', 'published', 'rejected'].includes(status)) {
             return res.status(400).json({ message: 'Неверный статус' });
         }
         
@@ -274,6 +274,42 @@ router.put('/:id/approve', auth, async (req, res) => {
         res.json({ message: 'Рецепт одобрен', recipe });
     } catch (err) {
         console.error(`PUT /api/recipes/${req.params.id}/approve - Error:`, err.message, err.stack);
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.put('/:id/reject', auth, async (req, res) => {
+    try {
+        console.log(`PUT /api/recipes/${req.params.id}/reject - Author ID:`, req.user?.id);
+        if (!req.user?.id) {
+            console.log('No user ID in req.user');
+            return res.status(401).json({ message: 'Пользователь не авторизован' });
+        }
+        if (!req.user.isAdmin) {
+            console.log(`User ${req.user.id} is not an admin`);
+            return res.status(403).json({ message: 'Только администраторы могут отклонять рецепты' });
+        }
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            console.log(`Invalid recipeId: ${req.params.id}`);
+            return res.status(400).json({ message: 'Неверный ID рецепта' });
+        }
+        const recipe = await Recipe.findById(req.params.id);
+        if (!recipe) {
+            console.log(`Recipe ${req.params.id} not found`);
+            return res.status(404).json({ message: 'Рецепт не найден' });
+        }
+        if (recipe.status === 'rejected') {
+            return res.status(400).json({ message: 'Рецепт уже отклонён' });
+        }
+        if (recipe.status === 'published') {
+            return res.status(400).json({ message: 'Рецепт уже опубликован' });
+        }
+        recipe.status = 'rejected';
+        await recipe.save();
+        console.log(`Recipe ${req.params.id} rejected and set to rejected`);
+        res.json({ message: 'Рецепт отклонён', recipe });
+    } catch (err) {
+        console.error(`PUT /api/recipes/${req.params.id}/reject - Error:`, err.message, err.stack);
         res.status(500).json({ message: err.message });
     }
 });
