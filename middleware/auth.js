@@ -9,7 +9,6 @@ module.exports = function (req, res, next) {
             return res.status(401).json({ message: 'Токен не предоставлен' });
         }
         const token = authHeader.replace('Bearer ', '');
-        console.log('Received Authorization header:', token);
         console.log('Auth middleware - Token:', token);
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         console.log('Auth middleware - Decoded:', decoded);
@@ -24,6 +23,9 @@ module.exports = function (req, res, next) {
         next();
     } catch (err) {
         console.error('Auth middleware - Error:', err.message);
+        if (err.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: 'Срок действия токена истёк. Пожалуйста, авторизуйтесь заново.' });
+        }
         res.status(401).json({ message: 'Пожалуйста, авторизуйтесь' });
     }
 };
