@@ -5,7 +5,7 @@ const Recipe = require('../models/Recipe');
 const auth = require('../middleware/auth');
 const multer = require('multer');
 const cloudinary = require('../cloudinary');
-const User = require('../models/User'); // Добавляем импорт модели User
+const User = require('../models/User');
 
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -212,7 +212,7 @@ router.delete('/:id', auth, async (req, res) => {
             console.log(`Recipe ${req.params.id} has no author`);
             return res.status(400).json({ message: 'Рецепт не имеет автора' });
         }
-        if (recipe.author.toString() !== req.user.id) {
+        if (recipe.author.toString() !== req.user.id && !req.user.isAdmin) {
             console.log(`User ${req.user.id} not authorized to delete recipe ${req.params.id}`);
             return res.status(403).json({ message: 'Вы не можете удалить этот рецепт' });
         }
