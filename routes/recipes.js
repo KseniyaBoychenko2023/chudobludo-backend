@@ -155,6 +155,27 @@ router.post(
     },
 );
 
+router.get('/user/all', auth, async (req, res) => {
+    try {
+        console.log(`GET /api/recipes/user/all - Author ID:`, req.user?.id);
+        if (!req.user.isAdmin) {
+            console.log(`User ${req.user.id} is not an admin`);
+            return res.status(403).json({ message: 'Только администраторы могут просматривать все рецепты' });
+        }
+
+        const status = req.query.status;
+        if (!['pending', 'published'].includes(status)) {
+            return res.status(400).json({ message: 'Неверный статус' });
+        }
+        
+        const recipes = await Recipe.find({ status: status });
+        res.json(recipes);
+    } catch (err) {
+        console.error('GET /api/recipes/user/all - Error:', err.message, err.stack);
+        res.status(500).json({ message: err.message });
+    }
+});
+
 router.get('/user/:userId', auth, async (req, res) => {
     try {
         console.log(`GET /api/recipes/user/${req.params.userId} - Author ID:`, req.user?.id);
@@ -166,25 +187,6 @@ router.get('/user/:userId', auth, async (req, res) => {
         res.json(recipes);
     } catch (err) {
         console.error('GET /api/recipes/user - Error:', err.message, err.stack);
-        res.status(500).json({ message: err.message });
-    }
-});
-
-router.get('/user/all', auth, async (req, res) => {
-    try {
-        console.log(`GET /api/recipes/user/all - Author ID:`, req.user?.id);
-        if (!req.user.isAdmin) {
-            console.log(`User ${req.user.id} is not an admin`);
-            return res.status(403).json({ message: 'Только администраторы могут просматривать все рецепты' });
-        }
-        const status = req.query.status;
-        if (!['pending', 'published'].includes(status)) {
-            return res.status(400).json({ message: 'Неверный статус' });
-        }
-        const recipes = await Recipe.find({ status: status });
-        res.json(recipes);
-    } catch (err) {
-        console.error('GET /api/recipes/user/all - Error:', err.message, err.stack);
         res.status(500).json({ message: err.message });
     }
 });
