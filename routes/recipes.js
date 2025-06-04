@@ -451,10 +451,6 @@ router.put(
       if (!Array.isArray(categories) || categories.length === 0) {
         return res.status(400).json({ message: 'Выберите хотя бы одну категорию' });
       }
-      const validCategories = ['breakfast', 'lunch', 'dinner', 'dessert', 'snack'];
-      if (!categories.every(cat => validCategories.includes(cat))) {
-        return res.status(400).json({ message: 'Недопустимая категория' });
-      }
       if (typeof servings !== 'number' || servings < 1 || servings > 100) {
         return res.status(400).json({ message: 'Количество порций должно быть от 1 до 100' });
       }
