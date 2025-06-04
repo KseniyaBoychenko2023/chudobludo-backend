@@ -429,73 +429,52 @@ router.put(
                     await cloudinary.uploader.destroy(`recipes/${publicId}`);
                 }
                 const result = await new Promise((resolve, reject) => {
-                    cloudinary.uploader
-                        .upload_stream(
-                            { resource_type: 'image', folder: 'recipes' },
-                            (error, result) => {
-                                if (error) reject(error);
-                                else resolve(result);
-                            },
-                        )
-                        .end(req.files.recipeImage[0].buffer);
+                    cloudinary.uploader.upload_stream(
+                        { resource_type: 'image', folder: 'recipes' },
+                        (error, result) => {
+                            if (error) reject(error);
+                            else resolve(result);
+                        }
+                    ).end(req.files.recipeImage[0].buffer);
                 });
                 recipe.image = result.secure_url;
                 console.log('Recipe image updated:', recipe.image);
             }
 
             // Обновляем шаги и их изображения
-            const stepImages = req.files && req.files.stepImages ? req.files.stepImages : [];
-            const stepImagePromises = [];
-            let stepImageIndex = 0;
-
-            recipe.steps = steps.map((step, index) => {
-                const existingStep = recipe.steps[index] || {};
-                let stepImage = existingStep.image;
-
-                if (req.files && req.files[`stepImages[${index}]`] && req.files[`stepImages[${index}]`][0]) {
-                    const file = req.files[`stepImages[${index}]`][0];
-                    const destroyPromise = stepImage
-                        ? cloudinary.uploader.destroy(`recipe_steps/${stepImage.split('/').pop().split('.')[0]}`)
-                        : Promise.resolve();
-
-                    const uploadPromise = destroyPromise.then(() => {
-                        return new Promise((resolve, reject) => {
-                            cloudinary.uploader
-                                .upload_stream(
+            const stepImageUrls = Array(steps.length).fill('');
+            if (req.files && req.files.stepImages) {
+                for (const file of req.files.stepImages) {
+                    const match = file.fieldname.match(/stepImages\[(\d+)\]/);
+                    if (match) {
+                        const index = parseInt(match[1]);
+                        if (index < steps.length) {
+                            // Удаляем старое изображение, если оно существует
+                            if (recipe.steps[index] && recipe.steps[index].image) {
+                                const publicId = recipe.steps[index].image.split('/').pop().split('.')[0];
+                                await cloudinary.uploader.destroy(`recipe_steps/${publicId}`);
+                            }
+                            const result = await new Promise((resolve, reject) => {
+                                cloudinary.uploader.upload_stream(
                                     { resource_type: 'image', folder: 'recipe_steps' },
                                     (error, result) => {
                                         if (error) reject(error);
-                                        else resolve(result.secure_url);
+                                        else resolve(result);
                                     }
-                                )
-                                .end(file.buffer);
-                        });
-                    });
-
-                    stepImagePromises.push(uploadPromise.then(url => url).catch(err => {
-                        console.error(`Error uploading step image ${index}:`, err);
-                        return stepImage || '';
-                    }));
+                                ).end(file.buffer);
+                            });
+                            stepImageUrls[index] = result.secure_url;
+                            console.log(`Step ${index + 1} image uploaded: ${stepImageUrls[index]}`);
+                        }
+                    }
                 }
+            }
 
-                return {
-                    description: step.description || '',
-                    image: stepImage || ''
-                };
-            });
-
-            // Ждём завершения всех загрузок
-            const uploadedStepImages = await Promise.all(stepImagePromises);
-            let uploadedIndex = 0;
-            recipe.steps = recipe.steps.map((step, index) => {
-                if (req.files && req.files[`stepImages[${index}]`] && req.files[`stepImages[${index}]`][0]) {
-                    return {
-                        ...step,
-                        image: uploadedStepImages[uploadedIndex++] || ''
-                    };
-                }
-                return step;
-            });
+            // Сохраняем существующие изображения для шагов, если новые не загружены
+            recipe.steps = steps.map((step, index) => ({
+                description: step.description || '',
+                image: stepImageUrls[index] || (recipe.steps[index] && recipe.steps[index].image) || ''
+            }));
 
             // Сбрасываем статус на pending, если редактирует не админ
             if (!req.user.isAdmin) {
