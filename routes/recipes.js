@@ -26,7 +26,7 @@ router.post(
     auth,
     upload.fields([
         { name: 'recipeImage', maxCount: 1 },
-        { name: 'stepImages', maxCount: 50 },
+        { name: 'step-image', maxCount: 50 },
     ]),
     async (req, res) => {
         try {
@@ -394,7 +394,7 @@ router.put(
   auth,
   upload.fields([
     { name: 'recipeImage', maxCount: 1 },
-    { name: 'stepImages', maxCount: 50 },
+    { name: 'step-image', maxCount: 50 },
   ]),
   async (req, res) => {
     try {
