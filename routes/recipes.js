@@ -109,10 +109,9 @@ router.post(
             }
 
             const stepImageUrls = Array(steps.length).fill('');
-            if (req.files && req.files.stepImages) {
+            if (req.files && req.files['step-image']) {
                 await Promise.all(
-                    req.files.stepImages.map((file, idx) =>
-                        // для каждого file делаем загрузку в Cloudinary и записываем в stepImageUrls[idx] = secure_url
+                    req.files['step-image'].map((file, idx) => 
                         new Promise((resolve, reject) => {
                             cloudinary.uploader.upload_stream(
                                 { resource_type: 'image', folder: 'recipe_steps' },
@@ -445,7 +444,7 @@ router.put(
       if (!title || title.length > 50) {
         return res.status(400).json({ message: 'Название рецепта должно быть от 1 до 50 символов' });
       }
-      if (description.length > 1000) {
+      if (!description || description.length > 1000) {
         return res.status(400).json({ message: 'Описание рецепта должно быть до 1000 символов' });
       }
       if (!Array.isArray(categories) || categories.length === 0) {
@@ -454,7 +453,7 @@ router.put(
       if (typeof servings !== 'number' || servings < 1 || servings > 100) {
         return res.status(400).json({ message: 'Количество порций должно быть от 1 до 100' });
       }
-      if (typeof cookingTime !== 'number' || cookingTime < 0 || cookingTime > 100000) {
+      if (typeof cookingTime !== 'number' || cookingTime < 1 || cookingTime > 100000) {
         return res.status(400).json({ message: 'Время приготовления должно быть от 0 до 100000 минут' });
       }
       if (!Array.isArray(ingredients) || ingredients.length === 0 || ingredients.length > 100) {
@@ -541,28 +540,26 @@ router.put(
       const stepImageUrls = Array(steps.length).fill('');
 
       // 8) Если пришли файлы шагов, загружаем их в том порядке, в каком их передали в FormData:
-      if (req.files && req.files.stepImages) {
+      if (req.files && req.files['step-image']) {
         await Promise.all(
-          req.files.stepImages.map((file, idx) =>
-            new Promise((resolve, reject) => {
-              // Если в старом recipe.steps[idx] уже была картинка, удаляем её:
-              if (recipe.steps[idx] && recipe.steps[idx].image) {
-                const oldStepId = recipe.steps[idx].image.split('/').pop().split('.')[0];
-                cloudinary.uploader.destroy(`recipe_steps/${oldStepId}`, () => {});
-              }
-              // Загружаем новый файл:
-              cloudinary.uploader.upload_stream(
-                { resource_type: 'image', folder: 'recipe_steps' },
-                (error, result) => {
-                  if (error) return reject(error);
-                  stepImageUrls[idx] = result.secure_url;
-                  resolve();
-                }
-              ).end(file.buffer);
-            })
-          )
+            req.files['step-image'].map((file, idx) => 
+                new Promise((resolve, reject) => {
+                    if (recipe.steps[idx] && recipe.steps[idx].image) {
+                        const oldStepId = recipe.steps[idx].image.split('/').pop().split('.')[0];
+                        cloudinary.uploader.destroy(`recipe_steps/${oldStepId}`, () => {});
+                    }
+                    cloudinary.uploader.upload_stream(
+                        { resource_type: 'image', folder: 'recipe_steps' },
+                        (error, result) => {
+                            if (error) return reject(error);
+                            stepImageUrls[idx] = result.secure_url;
+                            resolve();
+                        }
+                    ).end(file.buffer);
+                })
+            )
         );
-      }
+    }
 
       // 9) Составляем окончательный массив recipe.steps:
       recipe.steps = steps.map((step, index) => ({
@@ -579,8 +576,12 @@ router.put(
         recipe.status = 'pending';
       }
 
-      // 11) Сохраняем всё:
-      await recipe.save();
+    try {
+        await recipe.save();
+    } catch(validationErr) {
+        console.error('Ошибка валидации Mongoose при обновлении рецепта:', validationErr);
+        return res.status(400).json({ message: 'Ошибка валидации при обновлении', details: validationErr.message });
+    }
       console.log(`Recipe ${req.params.id} updated`);
       res.json(recipe);
 
