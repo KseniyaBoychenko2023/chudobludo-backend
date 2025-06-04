@@ -31,97 +31,47 @@ router.post(
     async (req, res) => {
         try {
             console.log('POST /api/recipes - Request body:', req.body, 'Files:', req.files, 'Author ID:', req.user?.id);
-            if (!req.user?.id) {
-                console.log('No user ID in req.user');
-                return res.status(401).json({ message: 'Пользователь не авторизован' });
-            }
+            if (!req.user?.id) return res.status(401).json({ message: 'Пользователь не авторизован' });
 
             let recipeData = req.body.recipeData;
-            if (!recipeData) {
-                console.log('recipeData is missing');
-                return res.status(400).json({ message: 'Данные рецепта отсутствуют' });
-            }
+            if (!recipeData) return res.status(400).json({ message: 'Данные рецепта отсутствуют' });
             if (typeof recipeData === 'string') {
-                try {
-                    recipeData = JSON.parse(recipeData);
-                } catch (err) {
-                    console.log('JSON parse error:', err);
-                    return res.status(400).json({ message: 'Неверный формат данных' });
-                }
+                try { recipeData = JSON.parse(recipeData); } 
+                catch (err) { return res.status(400).json({ message: 'Неверный формат данных' }); }
             }
 
-            if (!recipeData.title || !recipeData.ingredients || !Array.isArray(recipeData.ingredients)) {
-                console.log('Invalid ingredients or missing title:', recipeData);
-                return res.status(400).json({ message: 'Название и ингредиенты обязательны, ингредиенты должны быть массивом' });
+            const { title, ingredients, ingredientQuantities, ingredientUnits, steps } = recipeData;
+            if (!title || !Array.isArray(ingredients) || !Array.isArray(ingredientQuantities) || !Array.isArray(ingredientUnits) || !Array.isArray(steps)) {
+                return res.status(400).json({ message: 'Неверные данные рецепта' });
             }
-            if (!recipeData.ingredientQuantities || !Array.isArray(recipeData.ingredientQuantities)) {
-                console.log('Invalid ingredientQuantities:', recipeData.ingredientQuantities);
-                return res.status(400).json({ message: 'Количество ингредиентов должно быть массивом' });
-            }
-            if (!recipeData.ingredientUnits || !Array.isArray(recipeData.ingredientUnits)) {
-                console.log('Invalid ingredientUnits:', recipeData.ingredientUnits);
-                return res.status(400).json({ message: 'Единицы измерения должны быть массивом' });
-            }
-            if (!recipeData.steps || !Array.isArray(recipeData.steps)) {
-                console.log('Invalid steps:', recipeData.steps);
-                return res.status(400).json({ message: 'Шаги должны быть массивом' });
-            }
-
-            if (recipeData.ingredients.length !== recipeData.ingredientQuantities.length ||
-                recipeData.ingredients.length !== recipeData.ingredientUnits.length) {
-                console.log('Array length mismatch:', {
-                    ingredients: recipeData.ingredients.length,
-                    quantities: recipeData.ingredientQuantities.length,
-                    units: recipeData.ingredientUnits.length
-                });
+            if (ingredients.length !== ingredientQuantities.length || ingredients.length !== ingredientUnits.length) {
                 return res.status(400).json({ message: 'Несоответствие длины массивов ингредиентов, количеств и единиц' });
             }
 
             let recipeImageUrl = '';
             if (req.files && req.files.recipeImage && req.files.recipeImage[0]) {
-                console.log('Uploading recipe image to Cloudinary with config:', cloudinary.config());
                 const result = await new Promise((resolve, reject) => {
-                    cloudinary.uploader
-                        .upload_stream(
-                            { resource_type: 'image', folder: 'recipes' },
-                            (error, result) => {
-                                if (error) {
-                                    console.error('Cloudinary upload error:', error);
-                                    reject(error);
-                                } else {
-                                    resolve(result);
-                                }
-                            },
-                        )
-                        .end(req.files.recipeImage[0].buffer);
+                    cloudinary.uploader.upload_stream({ resource_type: 'image', folder: 'recipes' }, (error, result) => {
+                        if (error) return reject(error);
+                        resolve(result);
+                    }).end(req.files.recipeImage[0].buffer);
                 });
                 recipeImageUrl = result.secure_url;
-                console.log('Recipe image uploaded:', recipeImageUrl);
             }
 
-            const stepImageUrls = [];
-            if (req.files) {
-                for (let i = 0; i < recipeData.steps.length; i++) {
-                    const fieldName = `stepImages[${i}]`;
-                    if (req.files[fieldName] && req.files[fieldName][0]) {
-                        console.log(`Uploading step image for step ${i} to Cloudinary`);
+            const stepImageUrls = Array(steps.length).fill('');
+            if (req.files && req.files.stepImages) {
+                // Пути вида "stepImages": [File, File, ...] порядком
+                for (let i = 0; i < steps.length; i++) {
+                    if (req.files.stepImages[i]) {
+                        const file = req.files.stepImages[i][0] || req.files.stepImages[i];
                         const result = await new Promise((resolve, reject) => {
-                            cloudinary.uploader
-                                .upload_stream(
-                                    { resource_type: 'image', folder: 'recipe_steps' },
-                                    (error, result) => {
-                                        if (error) {
-                                            console.error(`Cloudinary upload error for step ${i}:`, error);
-                                            reject(error);
-                                        } else {
-                                            resolve(result);
-                                        }
-                                    },
-                                )
-                                .end(req.files[fieldName][0].buffer);
+                            cloudinary.uploader.upload_stream({ resource_type: 'image', folder: 'recipe_steps' }, (error, result) => {
+                                if (error) return reject(error);
+                                resolve(result);
+                            }).end(file.buffer);
                         });
                         stepImageUrls[i] = result.secure_url;
-                        console.log(`Step image ${i} uploaded:`, stepImageUrls[i]);
                     }
                 }
             }
@@ -132,15 +82,11 @@ router.post(
                 description: recipeData.description || '',
                 servings: parseInt(recipeData.servings) || 1,
                 cookingTime: parseInt(recipeData.cookingTime) || 0,
-                ingredients: recipeData.ingredients,
-                ingredientQuantities: recipeData.ingredientQuantities.map(q => {
-                    const parsed = parseFloat(q);
-                    console.log('Parsing quantity:', q, 'Result:', parsed);
-                    return isNaN(parsed) ? 0 : parsed;
-                }),
-                ingredientUnits: recipeData.ingredientUnits,
+                ingredients,
+                ingredientQuantities: ingredientQuantities.map(q => parseFloat(q) || 0),
+                ingredientUnits,
                 image: recipeImageUrl,
-                steps: recipeData.steps.map((step, index) => ({
+                steps: steps.map((step, index) => ({
                     description: step.description || '',
                     image: stepImageUrls[index] || ''
                 })),
@@ -151,24 +97,14 @@ router.post(
             console.log('Recipe object before save:', recipe.toJSON());
             await recipe.save();
 
-            const user = await User.findById(req.user.id);
-            if (!user) {
-                console.log('User not found:', req.user.id);
-                return res.status(404).json({ message: 'Пользователь не найден' });
-            }
-            await User.findByIdAndUpdate(
-                req.user.id,
-                { $push: { createdRecipes: recipe._id } },
-                { new: true }
-            );
-            console.log(`Recipe ${recipe._id} added to user's createdRecipes`);
+            await User.findByIdAndUpdate(req.user.id, { $push: { createdRecipes: recipe._id } });
 
             res.status(201).json(recipe);
         } catch (err) {
             console.error('POST /api/recipes - Error:', err.message, err.stack);
-            res.status(500).json({ message: 'Внутренняя ошибка сервера', error: err.message }); // Изменили на 500 для отладки
+            res.status(500).json({ message: 'Внутренняя ошибка сервера', error: err.message });
         }
-    },
+    }
 );
 
 router.get('/user/all', auth, async (req, res) => {
