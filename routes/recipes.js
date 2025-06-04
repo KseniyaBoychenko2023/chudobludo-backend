@@ -95,24 +95,28 @@ router.post(
                 console.log('Recipe image uploaded:', recipeImageUrl);
             }
 
+            // Обработка изображений шагов с учётом индексов
             const stepImageUrls = [];
-            if (req.files && req.files.stepImages) {
-                console.log('Uploading step images to Cloudinary:', req.files.stepImages.length);
-                for (const file of req.files.stepImages) {
-                    const result = await new Promise((resolve, reject) => {
-                        cloudinary.uploader
-                            .upload_stream(
-                                { resource_type: 'image', folder: 'recipe_steps' },
-                                (error, result) => {
-                                    if (error) reject(error);
-                                    else resolve(result);
-                                },
-                            )
-                            .end(file.buffer);
-                    });
-                    stepImageUrls.push(result.secure_url);
+            if (req.files) {
+                for (let i = 0; i < recipeData.steps.length; i++) {
+                    const fieldName = `stepImages[${i}]`;
+                    if (req.files[fieldName] && req.files[fieldName][0]) {
+                        console.log(`Uploading step image for step ${i} to Cloudinary`);
+                        const result = await new Promise((resolve, reject) => {
+                            cloudinary.uploader
+                                .upload_stream(
+                                    { resource_type: 'image', folder: 'recipe_steps' },
+                                    (error, result) => {
+                                        if (error) reject(error);
+                                        else resolve(result);
+                                    },
+                                )
+                                .end(req.files[fieldName][0].buffer);
+                        });
+                        stepImageUrls[i] = result.secure_url;
+                        console.log(`Step image ${i} uploaded:`, stepImageUrls[i]);
+                    }
                 }
-                console.log('Step images uploaded:', stepImageUrls);
             }
 
             const recipe = new Recipe({
@@ -131,7 +135,7 @@ router.post(
                 image: recipeImageUrl,
                 steps: recipeData.steps.map((step, index) => ({
                     description: step.description || '',
-                    image: stepImageUrls[index] || '',
+                    image: stepImageUrls[index] || ''
                 })),
                 author: req.user.id,
                 status: 'pending'
@@ -345,38 +349,42 @@ router.put('/:id/reject', auth, async (req, res) => {
     }
 });
 
-router.put('/:id/reconsider', auth, async (req, res) => {
-    try {
-        console.log(`PUT /api/recipes/${req.params.id}/reconsider - Author ID:`, req.user?.id);
-        if (!req.user?.id) {
-            console.log('No user ID in req.user');
-            return res.status(401).json({ message: 'Пользователь не авторизован' });
+router.put(
+    '/:id/reconsider',
+    auth,
+    async (req, res) => {
+        try {
+            console.log(`PUT /api/recipes/${req.params.id}/reconsider - Author ID:`, req.user?.id);
+            if (!req.user?.id) {
+                console.log('No user ID in req.user');
+                return res.status(401).json({ message: 'Пользователь не авторизован' });
+            }
+            if (!req.user.isAdmin) {
+                console.log(`User ${req.user.id} is not an admin`);
+                return res.status(403).json({ message: 'Только администраторы могут возвращать рецепты на рассмотрение' });
+            }
+            if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+                console.log(`Invalid recipeId: ${req.params.id}`);
+                return res.status(400).json({ message: 'Неверный ID рецепта' });
+            }
+            const recipe = await Recipe.findById(req.params.id);
+            if (!recipe) {
+                console.log(`Recipe ${req.params.id} not found`);
+                return res.status(404).json({ message: 'Рецепт не найден' });
+            }
+            if (recipe.status !== 'rejected') {
+                return res.status(400).json({ message: 'Рецепт не находится в статусе "отклонён"' });
+            }
+            recipe.status = 'pending';
+            await recipe.save();
+            console.log(`Recipe ${req.params.id} set to pending for reconsideration`);
+            res.json({ message: 'Рецепт возвращён на рассмотрение', recipe });
+        } catch (err) {
+            console.error(`PUT /api/recipes/${req.params.id}/reconsider - Error:`, err.message, err.stack);
+            res.status(500).json({ message: err.message });
         }
-        if (!req.user.isAdmin) {
-            console.log(`User ${req.user.id} is not an admin`);
-            return res.status(403).json({ message: 'Только администраторы могут возвращать рецепты на рассмотрение' });
-        }
-        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-            console.log(`Invalid recipeId: ${req.params.id}`);
-            return res.status(400).json({ message: 'Неверный ID рецепта' });
-        }
-        const recipe = await Recipe.findById(req.params.id);
-        if (!recipe) {
-            console.log(`Recipe ${req.params.id} not found`);
-            return res.status(404).json({ message: 'Рецепт не найден' });
-        }
-        if (recipe.status !== 'rejected') {
-            return res.status(400).json({ message: 'Рецепт не находится в статусе "отклонён"' });
-        }
-        recipe.status = 'pending';
-        await recipe.save();
-        console.log(`Recipe ${req.params.id} set to pending for reconsideration`);
-        res.json({ message: 'Рецепт возвращён на рассмотрение', recipe });
-    } catch (err) {
-        console.error(`PUT /api/recipes/${req.params.id}/reconsider - Error:`, err.message, err.stack);
-        res.status(500).json({ message: err.message });
     }
-});
+);
 
 router.put(
     '/:id',
@@ -491,7 +499,8 @@ router.put(
                 const existingStep = recipe.steps[index] || {};
                 let stepImage = existingStep.image;
 
-                if (stepImages[stepImageIndex]) {
+                if (req.files && req.files[`stepImages[${index}]`] && req.files[`stepImages[${index}]`][0]) {
+                    const file = req.files[`stepImages[${index}]`][0];
                     const destroyPromise = stepImage
                         ? cloudinary.uploader.destroy(`recipe_steps/${stepImage.split('/').pop().split('.')[0]}`)
                         : Promise.resolve();
@@ -506,23 +515,14 @@ router.put(
                                         else resolve(result.secure_url);
                                     }
                                 )
-                                .end(stepImages[stepImageIndex].buffer);
+                                .end(file.buffer);
                         });
                     });
 
-                    stepImagePromises.push(uploadPromise.then(url => {
-                        stepImageIndex++;
-                        return url;
-                    }).catch(err => {
-                        console.error('Error uploading step image:', err);
-                        stepImageIndex++;
+                    stepImagePromises.push(uploadPromise.then(url => url).catch(err => {
+                        console.error(`Error uploading step image ${index}:`, err);
                         return stepImage || '';
                     }));
-
-                    return {
-                        description: step.description || '',
-                        image: null
-                    };
                 }
 
                 return {
@@ -534,8 +534,8 @@ router.put(
             // Ждём завершения всех загрузок
             const uploadedStepImages = await Promise.all(stepImagePromises);
             let uploadedIndex = 0;
-            recipe.steps = recipe.steps.map(step => {
-                if (step.image === null) {
+            recipe.steps = recipe.steps.map((step, index) => {
+                if (req.files && req.files[`stepImages[${index}]`] && req.files[`stepImages[${index}]`][0]) {
                     return {
                         ...step,
                         image: uploadedStepImages[uploadedIndex++] || ''
@@ -547,7 +547,7 @@ router.put(
             // Сбрасываем статус на pending, если редактирует не админ
             if (!req.user.isAdmin) {
                 recipe.status = 'pending';
-                console.log(`Recipe ${req.params.id} status reset to pending due to user edit}`);
+                console.log(`Recipe ${req.params.id} status reset to pending due to user edit`);
             }
 
             await recipe.save();
@@ -557,6 +557,7 @@ router.put(
             console.error(`PUT /api/recipes/${req.params.id} - Error:`, err.message, err.stack);
             res.status(500).json({ message: err.message });
         }
-    });
+    }
+);
 
 module.exports = router;
