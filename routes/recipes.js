@@ -57,21 +57,26 @@ router.post(
                     }).end(req.files.recipeImage[0].buffer);
                 });
                 recipeImageUrl = result.secure_url;
+                console.log('Recipe image uploaded:', recipeImageUrl);
             }
 
             const stepImageUrls = Array(steps.length).fill('');
             if (req.files && req.files.stepImages) {
-                // Пути вида "stepImages": [File, File, ...] порядком
-                for (let i = 0; i < steps.length; i++) {
-                    if (req.files.stepImages[i]) {
-                        const file = req.files.stepImages[i][0] || req.files.stepImages[i];
-                        const result = await new Promise((resolve, reject) => {
-                            cloudinary.uploader.upload_stream({ resource_type: 'image', folder: 'recipe_steps' }, (error, result) => {
-                                if (error) return reject(error);
-                                resolve(result);
-                            }).end(file.buffer);
-                        });
-                        stepImageUrls[i] = result.secure_url;
+                for (const file of req.files.stepImages) {
+                    // Извлекаем индекс из fieldname (stepImages[0], stepImages[2] и т.д.)
+                    const match = file.fieldname.match(/stepImages\[(\d+)\]/);
+                    if (match) {
+                        const index = parseInt(match[1]);
+                        if (index < steps.length) {
+                            const result = await new Promise((resolve, reject) => {
+                                cloudinary.uploader.upload_stream({ resource_type: 'image', folder: 'recipe_steps' }, (error, result) => {
+                                    if (error) return reject(error);
+                                    resolve(result);
+                                }).end(file.buffer);
+                            });
+                            stepImageUrls[index] = result.secure_url;
+                            console.log(`Step ${index + 1} image uploaded: ${stepImageUrls[index]}`);
+                        }
                     }
                 }
             }
