@@ -40,12 +40,56 @@ router.post(
                 catch (err) { return res.status(400).json({ message: 'Неверный формат данных' }); }
             }
 
-            const { title, ingredients, ingredientQuantities, ingredientUnits, steps } = recipeData;
-            if (!title || !Array.isArray(ingredients) || !Array.isArray(ingredientQuantities) || !Array.isArray(ingredientUnits) || !Array.isArray(steps)) {
-                return res.status(400).json({ message: 'Неверные данные рецепта' });
+            const { title, categories, description, servings, cookingTime, ingredients, ingredientQuantities, ingredientUnits, steps } = recipeData;
+
+            // Валидация
+            if (!title || title.length > 50) {
+                return res.status(400).json({ message: 'Название рецепта должно быть от 1 до 50 символов' });
             }
-            if (ingredients.length !== ingredientQuantities.length || ingredients.length !== ingredientUnits.length) {
-                return res.status(400).json({ message: 'Несоответствие длины массивов ингредиентов, количеств и единиц' });
+            if (!description || description.length > 1000) {
+                return res.status(400).json({ message: 'Описание рецепта должно быть от 1 до 1000 символов' });
+            }
+            if (!Array.isArray(categories) || categories.length === 0) {
+                return res.status(400).json({ message: 'Выберите хотя бы одну категорию' });
+            }
+            if (typeof servings !== 'number' || servings < 1 || servings > 100) {
+                return res.status(400).json({ message: 'Количество порций должно быть от 1 до 100' });
+            }
+            if (typeof cookingTime !== 'number' || cookingTime < 1 || cookingTime > 100000) {
+                return res.status(400).json({ message: 'Время приготовления должно быть от 1 до 100000 минут' });
+            }
+            if (!Array.isArray(ingredients) || ingredients.length === 0 || ingredients.length > 100) {
+                return res.status(400).json({ message: 'Должен быть хотя бы один ингредиент, но не более 100' });
+            }
+            if (!Array.isArray(ingredientQuantities) || ingredientQuantities.length !== ingredients.length) {
+                return res.status(400).json({ message: 'Количество ингредиентов не соответствует их числу' });
+            }
+            if (!Array.isArray(ingredientUnits) || ingredientUnits.length !== ingredients.length) {
+                return res.status(400).json({ message: 'Единицы измерения не соответствуют числу ингредиентов' });
+            }
+            if (!Array.isArray(steps) || steps.length === 0 || steps.length > 50) {
+                return res.status(400).json({ message: 'Должен быть хотя бы один шаг, но не более 50' });
+            }
+
+            for (let i = 0; i < ingredients.length; i++) {
+                if (!ingredients[i] || ingredients[i].length > 50) {
+                    return res.status(400).json({ message: `Ингредиент ${i + 1} должен быть от 1 до 50 символов` });
+                }
+                if (typeof ingredientQuantities[i] !== 'number' || ingredientQuantities[i] < 0 || ingredientQuantities[i] > 1000) {
+                    return res.status(400).json({ message: `Количество для ингредиента ${i + 1} должно быть от 0 до 1000` });
+                }
+                if (!['г', 'кг', 'мл', 'л', 'шт', 'ст', 'стл', 'чл', 'пв'].includes(ingredientUnits[i])) {
+                    return res.status(400).json({ message: `Недопустимая единица измерения для ингредиента ${i + 1}` });
+                }
+                if (ingredientUnits[i] === 'пв' && ingredientQuantities[i] !== 0) {
+                    return res.status(400).json({ message: `Для единицы "по вкусу" количество должно быть 0 для ингредиента ${i + 1}` });
+                }
+            }
+
+            for (let i = 0; i < steps.length; i++) {
+                if (!steps[i].description || steps[i].description.length > 1000) {
+                    return res.status(400).json({ message: `Описание шага ${i + 1} должно быть от 1 до 1000 символов` });
+                }
             }
 
             let recipeImageUrl = '';
@@ -82,13 +126,13 @@ router.post(
             }
 
             const recipe = new Recipe({
-                title: recipeData.title,
-                categories: recipeData.categories || [],
-                description: recipeData.description || '',
-                servings: parseInt(recipeData.servings) || 1,
-                cookingTime: parseInt(recipeData.cookingTime) || 0,
+                title,
+                categories,
+                description,
+                servings,
+                cookingTime,
                 ingredients,
-                ingredientQuantities: ingredientQuantities.map(q => parseFloat(q) || 0),
+                ingredientQuantities,
                 ingredientUnits,
                 image: recipeImageUrl,
                 steps: steps.map((step, index) => ({
