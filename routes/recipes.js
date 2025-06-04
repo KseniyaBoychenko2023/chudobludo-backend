@@ -383,44 +383,68 @@ router.put(
                 }
             }
 
-            // Валидация recipeData
-            if (!recipeData.ingredients || !Array.isArray(recipeData.ingredients)) {
-                console.log('Invalid ingredients:', recipeData.ingredients);
-                return res.status(400).json({ message: 'Ингредиенты должны быть массивом' });
+            // Валидация
+            const { title, categories, description, servings, cookingTime, ingredients, ingredientQuantities, ingredientUnits, steps, removeRecipeImage } = recipeData;
+
+            if (!title || title.length > 50) {
+                return res.status(400).json({ message: 'Название рецепта должно быть от 1 до 50 символов' });
             }
-            if (!recipeData.ingredientQuantities || !Array.isArray(recipeData.ingredientQuantities)) {
-                console.log('Invalid ingredientQuantities:', recipeData.ingredientQuantities);
-                return res.status(400).json({ message: 'Количество ингредиентов должно быть массивом' });
+            if (description && description.length > 1000) {
+                return res.status(400).json({ message: 'Описание рецепта должно быть до 1000 символов' });
             }
-            if (!recipeData.ingredientUnits || !Array.isArray(recipeData.ingredientUnits)) {
-                console.log('Invalid ingredientUnits:', recipeData.ingredientUnits);
-                return res.status(400).json({ message: 'Единицы измерения должны быть массивом' });
+            if (!Array.isArray(categories) || categories.length === 0) {
+                return res.status(400).json({ message: 'Выберите хотя бы одну категорию' });
             }
-            if (!recipeData.steps || !Array.isArray(recipeData.steps)) {
-                console.log('Invalid steps:', recipeData.steps);
-                return res.status(400).json({ message: 'Шаги должны быть массивом' });
+            const validCategories = ['breakfast', 'lunch', 'dinner', 'dessert', 'snack'];
+            if (!categories.every(cat => validCategories.includes(cat))) {
+                return res.status(400).json({ message: 'Недопустимая категория' });
+            }
+            if (typeof servings !== 'number' || servings < 1 || servings > 100) {
+                return res.status(400).json({ message: 'Количество порций должно быть от 1 до 100' });
+            }
+            if (typeof cookingTime !== 'number' || cookingTime < 0 || cookingTime > 1000) {
+                return res.status(400).json({ message: 'Время приготовления должно быть от 0 до 1000 минут' });
+            }
+            if (!Array.isArray(ingredients) || ingredients.length === 0 || ingredients.length > 100) {
+                return res.status(400).json({ message: 'Должен быть хотя бы один ингредиент, но не более 100' });
+            }
+            if (!Array.isArray(ingredientQuantities) || ingredientQuantities.length !== ingredients.length) {
+                return res.status(400).json({ message: 'Количество ингредиентов не соответствует их числу' });
+            }
+            if (!Array.isArray(ingredientUnits) || ingredientUnits.length !== ingredients.length) {
+                return res.status(400).json({ message: 'Единицы измерения не соответствуют числу ингредиентов' });
+            }
+            if (!Array.isArray(steps) || steps.length === 0 || steps.length > 100) {
+                return res.status(400).json({ message: 'Должен быть хотя бы один шаг, но не более 100' });
             }
 
-            const { title, categories, description, servings, cookingTime, ingredients, ingredientQuantities, ingredientUnits, steps } = recipeData;
+            for (let i = 0; i < ingredients.length; i++) {
+                if (!ingredients[i] || ingredients[i].length > 50) {
+                    return res.status(400).json({ message: `Ингредиент ${i + 1} должен быть от 1 до 50 символов` });
+                }
+                if (typeof ingredientQuantities[i] !== 'number' || ingredientQuantities[i] < 0 || ingredientQuantities[i] > 1000) {
+                    return res.status(400).json({ message: `Количество для ингредиента ${i + 1} должно быть от 0 до 1000` });
+                }
+                if (!['г', 'кг', 'мл', 'л', 'шт', 'ст', 'стл', 'чл', 'пв'].includes(ingredientUnits[i])) {
+                    return res.status(400).json({ message: `Недопустимая единица измерения для ингредиента ${i + 1}` });
+                }
+            }
+
+            for (let i = 0; i < steps.length; i++) {
+                if (!steps[i].description || steps[i].description.length > 1000) {
+                    return res.status(400).json({ message: `Описание шага ${i + 1} должно быть от 1 до 1000 символов` });
+                }
+            }
 
             // Обновляем основные поля
             recipe.title = title;
-            recipe.categories = categories || [];
+            recipe.categories = categories;
             recipe.description = description || '';
-            recipe.servings = parseInt(servings) || 1;
-            recipe.cookingTime = parseInt(cookingTime) || 0;
-            recipe.ingredients = ingredients || [];
-            recipe.ingredientQuantities = ingredientQuantities.map(q => {
-                const parsed = parseFloat(q);
-                return isNaN(parsed) ? 0 : parsed;
-            }) || [];
-            recipe.ingredientUnits = ingredientUnits || [];
-
-            // Проверка соответствия массивов
-            if (recipe.ingredients.length !== recipe.ingredientQuantities.length ||
-                recipe.ingredients.length !== recipe.ingredientUnits.length) {
-                return res.status(400).json({ message: 'Несоответствие длины массивов ингредиентов, количеств и единиц' });
-            }
+            recipe.servings = servings;
+            recipe.cookingTime = cookingTime;
+            recipe.ingredients = ingredients;
+            recipe.ingredientQuantities = ingredientQuantities;
+            recipe.ingredientUnits = ingredientUnits;
 
             // Обновляем изображение рецепта
             if (req.files && req.files.recipeImage && req.files.recipeImage[0]) {
@@ -439,6 +463,13 @@ router.put(
                 });
                 recipe.image = result.secure_url;
                 console.log('Recipe image updated:', recipe.image);
+            } else if (removeRecipeImage) {
+                if (recipe.image) {
+                    const publicId = recipe.image.split('/').pop().split('.')[0];
+                    await cloudinary.uploader.destroy(`recipes/${publicId}`);
+                }
+                recipe.image = '';
+                console.log('Recipe image removed');
             }
 
             // Обновляем шаги и их изображения
@@ -449,7 +480,6 @@ router.put(
                     if (match) {
                         const index = parseInt(match[1]);
                         if (index < steps.length) {
-                            // Удаляем старое изображение, если оно существует
                             if (recipe.steps[index] && recipe.steps[index].image) {
                                 const publicId = recipe.steps[index].image.split('/').pop().split('.')[0];
                                 await cloudinary.uploader.destroy(`recipe_steps/${publicId}`);
@@ -470,10 +500,10 @@ router.put(
                 }
             }
 
-            // Сохраняем существующие изображения для шагов, если новые не загружены
+            // Обновляем шаги, сохраняя существующие изображения, если новые не загружены
             recipe.steps = steps.map((step, index) => ({
                 description: step.description || '',
-                image: stepImageUrls[index] || (recipe.steps[index] && recipe.steps[index].image) || ''
+                image: step.image || stepImageUrls[index] || (recipe.steps[index] && recipe.steps[index].image) || ''
             }));
 
             // Сбрасываем статус на pending, если редактирует не админ
