@@ -50,9 +50,9 @@ router.post(
                 }
             }
 
-            if (!recipeData.ingredients || !Array.isArray(recipeData.ingredients)) {
-                console.log('Invalid ingredients:', recipeData.ingredients);
-                return res.status(400).json({ message: 'Ингредиенты должны быть массивом' });
+            if (!recipeData.title || !recipeData.ingredients || !Array.isArray(recipeData.ingredients)) {
+                console.log('Invalid ingredients or missing title:', recipeData);
+                return res.status(400).json({ message: 'Название и ингредиенты обязательны, ингредиенты должны быть массивом' });
             }
             if (!recipeData.ingredientQuantities || !Array.isArray(recipeData.ingredientQuantities)) {
                 console.log('Invalid ingredientQuantities:', recipeData.ingredientQuantities);
@@ -79,14 +79,18 @@ router.post(
 
             let recipeImageUrl = '';
             if (req.files && req.files.recipeImage && req.files.recipeImage[0]) {
-                console.log('Uploading recipe image to Cloudinary');
+                console.log('Uploading recipe image to Cloudinary with config:', cloudinary.config());
                 const result = await new Promise((resolve, reject) => {
                     cloudinary.uploader
                         .upload_stream(
                             { resource_type: 'image', folder: 'recipes' },
                             (error, result) => {
-                                if (error) reject(error);
-                                else resolve(result);
+                                if (error) {
+                                    console.error('Cloudinary upload error:', error);
+                                    reject(error);
+                                } else {
+                                    resolve(result);
+                                }
                             },
                         )
                         .end(req.files.recipeImage[0].buffer);
@@ -95,7 +99,6 @@ router.post(
                 console.log('Recipe image uploaded:', recipeImageUrl);
             }
 
-            // Обработка изображений шагов с учётом индексов
             const stepImageUrls = [];
             if (req.files) {
                 for (let i = 0; i < recipeData.steps.length; i++) {
@@ -107,8 +110,12 @@ router.post(
                                 .upload_stream(
                                     { resource_type: 'image', folder: 'recipe_steps' },
                                     (error, result) => {
-                                        if (error) reject(error);
-                                        else resolve(result);
+                                        if (error) {
+                                            console.error(`Cloudinary upload error for step ${i}:`, error);
+                                            reject(error);
+                                        } else {
+                                            resolve(result);
+                                        }
                                     },
                                 )
                                 .end(req.files[fieldName][0].buffer);
@@ -141,9 +148,14 @@ router.post(
                 status: 'pending'
             });
 
+            console.log('Recipe object before save:', recipe.toJSON());
             await recipe.save();
 
-            // Добавляем ID рецепта в массив createdRecipes пользователя
+            const user = await User.findById(req.user.id);
+            if (!user) {
+                console.log('User not found:', req.user.id);
+                return res.status(404).json({ message: 'Пользователь не найден' });
+            }
             await User.findByIdAndUpdate(
                 req.user.id,
                 { $push: { createdRecipes: recipe._id } },
@@ -154,7 +166,7 @@ router.post(
             res.status(201).json(recipe);
         } catch (err) {
             console.error('POST /api/recipes - Error:', err.message, err.stack);
-            res.status(400).json({ message: err.message });
+            res.status(500).json({ message: 'Внутренняя ошибка сервера', error: err.message }); // Изменили на 500 для отладки
         }
     },
 );
