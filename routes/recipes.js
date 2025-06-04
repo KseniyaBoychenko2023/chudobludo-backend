@@ -42,6 +42,10 @@ router.post(
 
             const { title, categories, description, servings, cookingTime, ingredients, ingredientQuantities, ingredientUnits, steps } = recipeData;
 
+            console.log('>> Multer присвоил req.files:', req.files);
+            console.log('>> Multer присвоил req.body:', req.body);
+
+
             // Валидация
             if (!title || title.length > 50) {
                 return res.status(400).json({ message: 'Название рецепта должно быть от 1 до 50 символов' });
@@ -106,23 +110,21 @@ router.post(
 
             const stepImageUrls = Array(steps.length).fill('');
             if (req.files && req.files.stepImages) {
-                for (const file of req.files.stepImages) {
-                    // Извлекаем индекс из fieldname (stepImages[0], stepImages[2] и т.д.)
-                    const match = file.fieldname.match(/stepImages\[(\d+)\]/);
-                    if (match) {
-                        const index = parseInt(match[1]);
-                        if (index < steps.length) {
-                            const result = await new Promise((resolve, reject) => {
-                                cloudinary.uploader.upload_stream({ resource_type: 'image', folder: 'recipe_steps' }, (error, result) => {
+                await Promise.all(
+                    req.files.stepImages.map((file, idx) =>
+                        // для каждого file делаем загрузку в Cloudinary и записываем в stepImageUrls[idx] = secure_url
+                        new Promise((resolve, reject) => {
+                            cloudinary.uploader.upload_stream(
+                                { resource_type: 'image', folder: 'recipe_steps' },
+                                (error, result) => {
                                     if (error) return reject(error);
-                                    resolve(result);
-                                }).end(file.buffer);
-                            });
-                            stepImageUrls[index] = result.secure_url;
-                            console.log(`Step ${index + 1} image uploaded: ${stepImageUrls[index]}`);
-                        }
-                    }
-                }
+                                    stepImageUrls[idx] = result.secure_url;
+                                    resolve();
+                                }
+                            ).end(file.buffer);
+                        })
+                    )
+                );
             }
 
             const recipe = new Recipe({
@@ -144,7 +146,16 @@ router.post(
             });
 
             console.log('Recipe object before save:', recipe.toJSON());
-            await recipe.save();
+
+            console.log('>> Проверяем объект для сохранения:', JSON.stringify(recipe, null, 2));
+
+            try {
+                await recipe.save();
+            } catch(validationErr) {
+                console.error('Ошибка валидации Mongoose при сохранении рецепта:', validationErr);
+                return res.status(400).json({ message: 'Ошибка валидации при сохранении', details: validationErr.message });
+            }
+
 
             await User.findByIdAndUpdate(req.user.id, { $push: { createdRecipes: recipe._id } });
 
@@ -346,224 +357,244 @@ router.put('/:id/reject', auth, async (req, res) => {
     }
 });
 
-router.put(
-    '/:id/reconsider',
-    auth,
-    async (req, res) => {
-        try {
-            console.log(`PUT /api/recipes/${req.params.id}/reconsider - Author ID:`, req.user?.id);
-            if (!req.user?.id) {
-                console.log('No user ID in req.user');
-                return res.status(401).json({ message: 'Пользователь не авторизован' });
-            }
-            if (!req.user.isAdmin) {
-                console.log(`User ${req.user.id} is not an admin`);
-                return res.status(403).json({ message: 'Только администраторы могут возвращать рецепты на рассмотрение' });
-            }
-            if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-                console.log(`Invalid recipeId: ${req.params.id}`);
-                return res.status(400).json({ message: 'Неверный ID рецепта' });
-            }
-            const recipe = await Recipe.findById(req.params.id);
-            if (!recipe) {
-                console.log(`Recipe ${req.params.id} not found`);
-                return res.status(404).json({ message: 'Рецепт не найден' });
-            }
-            if (recipe.status !== 'rejected') {
-                return res.status(400).json({ message: 'Рецепт не находится в статусе "отклонён"' });
-            }
-            recipe.status = 'pending';
-            await recipe.save();
-            console.log(`Recipe ${req.params.id} set to pending for reconsideration`);
-            res.json({ message: 'Рецепт возвращён на рассмотрение', recipe });
-        } catch (err) {
-            console.error(`PUT /api/recipes/${req.params.id}/reconsider - Error:`, err.message, err.stack);
-            res.status(500).json({ message: err.message });
-        }
+router.put('/:id/reconsider', auth, async (req, res) => {
+  try {
+    // 1) Проверяем, что пользователь авторизован и является админом:
+    if (!req.user?.id) {
+      return res.status(401).json({ message: 'Пользователь не авторизован' });
     }
-);
+    if (!req.user.isAdmin) {
+      return res.status(403).json({ message: 'Только администратор может "повторно отправить на рассмотрение"' });
+    }
+    // 2) Проверяем валидность ID и находим рецепт:
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Неверный ID рецепта' });
+    }
+    const recipe = await Recipe.findById(req.params.id);
+    if (!recipe) {
+      return res.status(404).json({ message: 'Рецепт не найден' });
+    }
+    // 3) Если сейчас статус != 'rejected', нельзя «возвращать на рассмотрение»:
+    if (recipe.status !== 'rejected') {
+      return res.status(400).json({ message: 'Нельзя повторно отправить на рассмотрение рецепт со статусом "' + recipe.status + '"' });
+    }
+    // 4) Меняем статус:
+    recipe.status = 'pending';
+    await recipe.save();
+    return res.json({ message: 'Рецепт возвращён на рассмотрение', recipe });
+  } catch (err) {
+    console.error(`PUT /api/recipes/${req.params.id}/reconsider — Error:`, err);
+    return res.status(500).json({ message: 'Внутренняя ошибка сервера', error: err.message });
+  }
+});
+
 
 router.put(
-    '/:id',
-    auth,
-    upload.fields([
-        { name: 'recipeImage', maxCount: 1 },
-        { name: 'stepImages', maxCount: 50 },
-    ]),
-    async (req, res) => {
+  '/:id',
+  auth,
+  upload.fields([
+    { name: 'recipeImage', maxCount: 1 },
+    { name: 'stepImages', maxCount: 50 },
+  ]),
+  async (req, res) => {
+    try {
+      console.log(`PUT /api/recipes/${req.params.id} - User ID:`, req.user?.id);
+
+      // 1) Проверка авторизации + существования рецепта
+      if (!req.user?.id) {
+        return res.status(401).json({ message: 'Пользователь не авторизован' });
+      }
+      if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+        return res.status(400).json({ message: 'Неверный ID рецепта' });
+      }
+      const recipe = await Recipe.findById(req.params.id);
+      if (!recipe) {
+        return res.status(404).json({ message: 'Рецепт не найден' });
+      }
+      if (recipe.author.toString() !== req.user.id && !req.user.isAdmin) {
+        return res.status(403).json({ message: 'Вы не можете редактировать этот рецепт' });
+      }
+
+      // 2) Парсим данные из req.body.recipeData
+      let recipeData = req.body.recipeData;
+      if (!recipeData) {
+        return res.status(400).json({ message: 'Данные рецепта отсутствуют' });
+      }
+      if (typeof recipeData === 'string') {
         try {
-            console.log(`PUT /api/recipes/${req.params.id} - User ID:`, req.user?.id);
-            if (!req.user?.id) {
-                console.log('No user ID in req.user');
-                return res.status(401).json({ message: 'Пользователь не авторизован' });
-            }
-            if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-                console.log(`Invalid recipeId: ${req.params.id}`);
-                return res.status(400).json({ message: 'Неверный ID рецепта' });
-            }
-
-            const recipe = await Recipe.findById(req.params.id);
-            if (!recipe) {
-                console.log(`Recipe ${req.params.id} not found`);
-                return res.status(404).json({ message: 'Рецепт не найден' });
-            }
-
-            if (recipe.author.toString() !== req.user.id && !req.user.isAdmin) {
-                console.log(`User ${req.user.id} not authorized to edit recipe ${req.params.id}`);
-                return res.status(403).json({ message: 'Вы не можете редактировать этот рецепт' });
-            }
-
-            let recipeData = req.body.recipeData;
-            if (!recipeData) {
-                console.log('recipeData is missing');
-                return res.status(400).json({ message: 'Данные рецепта отсутствуют' });
-            }
-            if (typeof recipeData === 'string') {
-                try {
-                    recipeData = JSON.parse(recipeData);
-                } catch (err) {
-                    console.log('JSON parse error:', err);
-                    return res.status(400).json({ message: 'Неверный формат данных' });
-                }
-            }
-
-            // Валидация
-            const { title, categories, description, servings, cookingTime, ingredients, ingredientQuantities, ingredientUnits, steps, removeRecipeImage } = recipeData;
-
-            if (!title || title.length > 50) {
-                return res.status(400).json({ message: 'Название рецепта должно быть от 1 до 50 символов' });
-            }
-            if (description && description.length > 1000) {
-                return res.status(400).json({ message: 'Описание рецепта должно быть до 1000 символов' });
-            }
-            if (!Array.isArray(categories) || categories.length === 0) {
-                return res.status(400).json({ message: 'Выберите хотя бы одну категорию' });
-            }
-            const validCategories = ['breakfast', 'lunch', 'dinner', 'dessert', 'snack'];
-            if (!categories.every(cat => validCategories.includes(cat))) {
-                return res.status(400).json({ message: 'Недопустимая категория' });
-            }
-            if (typeof servings !== 'number' || servings < 1 || servings > 100) {
-                return res.status(400).json({ message: 'Количество порций должно быть от 1 до 100' });
-            }
-            if (typeof cookingTime !== 'number' || cookingTime < 0 || cookingTime > 1000) {
-                return res.status(400).json({ message: 'Время приготовления должно быть от 0 до 1000 минут' });
-            }
-            if (!Array.isArray(ingredients) || ingredients.length === 0 || ingredients.length > 100) {
-                return res.status(400).json({ message: 'Должен быть хотя бы один ингредиент, но не более 100' });
-            }
-            if (!Array.isArray(ingredientQuantities) || ingredientQuantities.length !== ingredients.length) {
-                return res.status(400).json({ message: 'Количество ингредиентов не соответствует их числу' });
-            }
-            if (!Array.isArray(ingredientUnits) || ingredientUnits.length !== ingredients.length) {
-                return res.status(400).json({ message: 'Единицы измерения не соответствуют числу ингредиентов' });
-            }
-            if (!Array.isArray(steps) || steps.length === 0 || steps.length > 100) {
-                return res.status(400).json({ message: 'Должен быть хотя бы один шаг, но не более 100' });
-            }
-
-            for (let i = 0; i < ingredients.length; i++) {
-                if (!ingredients[i] || ingredients[i].length > 50) {
-                    return res.status(400).json({ message: `Ингредиент ${i + 1} должен быть от 1 до 50 символов` });
-                }
-                if (typeof ingredientQuantities[i] !== 'number' || ingredientQuantities[i] < 0 || ingredientQuantities[i] > 1000) {
-                    return res.status(400).json({ message: `Количество для ингредиента ${i + 1} должно быть от 0 до 1000` });
-                }
-                if (!['г', 'кг', 'мл', 'л', 'шт', 'ст', 'стл', 'чл', 'пв'].includes(ingredientUnits[i])) {
-                    return res.status(400).json({ message: `Недопустимая единица измерения для ингредиента ${i + 1}` });
-                }
-            }
-
-            for (let i = 0; i < steps.length; i++) {
-                if (!steps[i].description || steps[i].description.length > 1000) {
-                    return res.status(400).json({ message: `Описание шага ${i + 1} должно быть от 1 до 1000 символов` });
-                }
-            }
-
-            // Обновляем основные поля
-            recipe.title = title;
-            recipe.categories = categories;
-            recipe.description = description || '';
-            recipe.servings = servings;
-            recipe.cookingTime = cookingTime;
-            recipe.ingredients = ingredients;
-            recipe.ingredientQuantities = ingredientQuantities;
-            recipe.ingredientUnits = ingredientUnits;
-
-            // Обновляем изображение рецепта
-            if (req.files && req.files.recipeImage && req.files.recipeImage[0]) {
-                if (recipe.image) {
-                    const publicId = recipe.image.split('/').pop().split('.')[0];
-                    await cloudinary.uploader.destroy(`recipes/${publicId}`);
-                }
-                const result = await new Promise((resolve, reject) => {
-                    cloudinary.uploader.upload_stream(
-                        { resource_type: 'image', folder: 'recipes' },
-                        (error, result) => {
-                            if (error) reject(error);
-                            else resolve(result);
-                        }
-                    ).end(req.files.recipeImage[0].buffer);
-                });
-                recipe.image = result.secure_url;
-                console.log('Recipe image updated:', recipe.image);
-            } else if (removeRecipeImage) {
-                if (recipe.image) {
-                    const publicId = recipe.image.split('/').pop().split('.')[0];
-                    await cloudinary.uploader.destroy(`recipes/${publicId}`);
-                }
-                recipe.image = '';
-                console.log('Recipe image removed');
-            }
-
-            // Обновляем шаги и их изображения
-            const stepImageUrls = Array(steps.length).fill('');
-            if (req.files && req.files.stepImages) {
-                for (const file of req.files.stepImages) {
-                    const match = file.fieldname.match(/stepImages\[(\d+)\]/);
-                    if (match) {
-                        const index = parseInt(match[1]);
-                        if (index < steps.length) {
-                            if (recipe.steps[index] && recipe.steps[index].image) {
-                                const publicId = recipe.steps[index].image.split('/').pop().split('.')[0];
-                                await cloudinary.uploader.destroy(`recipe_steps/${publicId}`);
-                            }
-                            const result = await new Promise((resolve, reject) => {
-                                cloudinary.uploader.upload_stream(
-                                    { resource_type: 'image', folder: 'recipe_steps' },
-                                    (error, result) => {
-                                        if (error) reject(error);
-                                        else resolve(result);
-                                    }
-                                ).end(file.buffer);
-                            });
-                            stepImageUrls[index] = result.secure_url;
-                            console.log(`Step ${index + 1} image uploaded: ${stepImageUrls[index]}`);
-                        }
-                    }
-                }
-            }
-
-            // Обновляем шаги, сохраняя существующие изображения, если новые не загружены
-            recipe.steps = steps.map((step, index) => ({
-                description: step.description || '',
-                image: step.image || stepImageUrls[index] || (recipe.steps[index] && recipe.steps[index].image) || ''
-            }));
-
-            // Сбрасываем статус на pending, если редактирует не админ
-            if (!req.user.isAdmin) {
-                recipe.status = 'pending';
-                console.log(`Recipe ${req.params.id} status reset to pending due to user edit`);
-            }
-
-            await recipe.save();
-            console.log(`Recipe ${req.params.id} updated`);
-            res.json(recipe);
+          recipeData = JSON.parse(recipeData);
         } catch (err) {
-            console.error(`PUT /api/recipes/${req.params.id} - Error:`, err.message, err.stack);
-            res.status(500).json({ message: err.message });
+          return res.status(400).json({ message: 'Неверный формат JSON в recipeData' });
         }
+      }
+
+      const {
+        title,
+        categories,
+        description = '',
+        servings,
+        cookingTime,
+        ingredients,
+        ingredientQuantities,
+        ingredientUnits,
+        steps,
+        removeRecipeImage
+      } = recipeData;
+
+      // 3) Валидация полей (всё как у вас было, но без дублирования)
+      if (!title || title.length > 50) {
+        return res.status(400).json({ message: 'Название рецепта должно быть от 1 до 50 символов' });
+      }
+      if (description.length > 1000) {
+        return res.status(400).json({ message: 'Описание рецепта должно быть до 1000 символов' });
+      }
+      if (!Array.isArray(categories) || categories.length === 0) {
+        return res.status(400).json({ message: 'Выберите хотя бы одну категорию' });
+      }
+      const validCategories = ['breakfast', 'lunch', 'dinner', 'dessert', 'snack'];
+      if (!categories.every(cat => validCategories.includes(cat))) {
+        return res.status(400).json({ message: 'Недопустимая категория' });
+      }
+      if (typeof servings !== 'number' || servings < 1 || servings > 100) {
+        return res.status(400).json({ message: 'Количество порций должно быть от 1 до 100' });
+      }
+      if (typeof cookingTime !== 'number' || cookingTime < 0 || cookingTime > 100000) {
+        return res.status(400).json({ message: 'Время приготовления должно быть от 0 до 100000 минут' });
+      }
+      if (!Array.isArray(ingredients) || ingredients.length === 0 || ingredients.length > 100) {
+        return res.status(400).json({ message: 'Должен быть хотя бы один ингредиент, но не более 100' });
+      }
+      if (!Array.isArray(ingredientQuantities) || ingredientQuantities.length !== ingredients.length) {
+        return res.status(400).json({ message: 'Количество ингредиентов не соответствует их числу' });
+      }
+      if (!Array.isArray(ingredientUnits) || ingredientUnits.length !== ingredients.length) {
+        return res.status(400).json({ message: 'Единицы измерения не соответствуют числу ингредиентов' });
+      }
+      for (let i = 0; i < ingredients.length; i++) {
+        if (!ingredients[i] || ingredients[i].length > 50) {
+          return res.status(400).json({
+            message: `Ингредиент ${i + 1} должен быть от 1 до 50 символов`
+          });
+        }
+        const qty = ingredientQuantities[i];
+        if (typeof qty !== 'number' || qty < 0 || qty > 1000) {
+          return res.status(400).json({
+            message: `Количество для ингредиента ${i + 1} должно быть от 0 до 1000`
+          });
+        }
+        const unit = ingredientUnits[i];
+        if (!['г', 'кг', 'мл', 'л', 'шт', 'ст', 'стл', 'чл', 'пв'].includes(unit)) {
+          return res.status(400).json({
+            message: `Недопустимая единица измерения для ингредиента ${i + 1}`
+          });
+        }
+        if (unit === 'пв' && qty !== 0) {
+          return res.status(400).json({
+            message: `Для единицы "по вкусу" количество должно быть 0 для ингредиента ${i + 1}`
+          });
+        }
+      }
+      if (!Array.isArray(steps) || steps.length === 0 || steps.length > 50) {
+        return res.status(400).json({ message: 'Должен быть хотя бы один шаг, но не более 50' });
+      }
+      for (let i = 0; i < steps.length; i++) {
+        if (!steps[i].description || steps[i].description.length > 1000) {
+          return res.status(400).json({
+            message: `Описание шага ${i + 1} должно быть от 1 до 1000 символов`
+          });
+        }
+      }
+
+      // 4) Обновляем основные поля в объекте recipe:
+      recipe.title = title;
+      recipe.categories = categories;
+      recipe.description = description;
+      recipe.servings = servings;
+      recipe.cookingTime = cookingTime;
+      recipe.ingredients = ingredients;
+      recipe.ingredientQuantities = ingredientQuantities;
+      recipe.ingredientUnits = ingredientUnits;
+
+      // 5) Если пришёл флаг removeRecipeImage=true, убираем старую картинку:
+      if (removeRecipeImage && recipe.image) {
+        // Парсим publicId («имя без расширения») и удаляем из Cloudinary
+        const publicId = recipe.image.split('/').pop().split('.')[0];
+        await cloudinary.uploader.destroy(`recipes/${publicId}`);
+        recipe.image = '';
+      }
+
+      // 6) Если пришёл новый файл recipeImage, загружаем его и удаляем старый:
+      if (req.files && req.files.recipeImage && req.files.recipeImage[0]) {
+        if (recipe.image) {
+          const oldPublicId = recipe.image.split('/').pop().split('.')[0];
+          await cloudinary.uploader.destroy(`recipes/${oldPublicId}`);
+        }
+        const uploadResult = await new Promise((resolve, reject) => {
+          cloudinary.uploader.upload_stream(
+            { resource_type: 'image', folder: 'recipes' },
+            (error, result) => {
+              if (error) return reject(error);
+              resolve(result);
+            }
+          ).end(req.files.recipeImage[0].buffer);
+        });
+        recipe.image = uploadResult.secure_url;
+      }
+
+      // 7) Подготовка массива для новых URL картинок шагов
+      const stepImageUrls = Array(steps.length).fill('');
+
+      // 8) Если пришли файлы шагов, загружаем их в том порядке, в каком их передали в FormData:
+      if (req.files && req.files.stepImages) {
+        await Promise.all(
+          req.files.stepImages.map((file, idx) =>
+            new Promise((resolve, reject) => {
+              // Если в старом recipe.steps[idx] уже была картинка, удаляем её:
+              if (recipe.steps[idx] && recipe.steps[idx].image) {
+                const oldStepId = recipe.steps[idx].image.split('/').pop().split('.')[0];
+                cloudinary.uploader.destroy(`recipe_steps/${oldStepId}`, () => {});
+              }
+              // Загружаем новый файл:
+              cloudinary.uploader.upload_stream(
+                { resource_type: 'image', folder: 'recipe_steps' },
+                (error, result) => {
+                  if (error) return reject(error);
+                  stepImageUrls[idx] = result.secure_url;
+                  resolve();
+                }
+              ).end(file.buffer);
+            })
+          )
+        );
+      }
+
+      // 9) Составляем окончательный массив recipe.steps:
+      recipe.steps = steps.map((step, index) => ({
+        description: step.description,
+        image:
+          // приоритет: 1) новая картинка из stepImageUrls[index]
+          //            2) старая картинка recipe.steps[index].image (если её не удалили)
+          //            3) пустая строка
+          stepImageUrls[index] || (recipe.steps[index]?.image || '')
+      }));
+
+      // 10) Если текущий пользователь — не админ, сбрасываем статус на «pending»:
+      if (!req.user.isAdmin) {
+        recipe.status = 'pending';
+      }
+
+      // 11) Сохраняем всё:
+      await recipe.save();
+      console.log(`Recipe ${req.params.id} updated`);
+      res.json(recipe);
+
+    } catch (err) {
+      console.error(`PUT /api/recipes/${req.params.id} - Error:`, err);
+      return res.status(500).json({ message: 'Внутренняя ошибка сервера', error: err.message });
     }
+  }
 );
+
+
 
 module.exports = router;
