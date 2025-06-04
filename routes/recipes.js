@@ -430,7 +430,7 @@ router.put(
       const {
         title,
         categories,
-        description = '',
+        description,
         servings,
         cookingTime,
         ingredients,
@@ -454,7 +454,7 @@ router.put(
         return res.status(400).json({ message: 'Количество порций должно быть от 1 до 100' });
       }
       if (typeof cookingTime !== 'number' || cookingTime < 1 || cookingTime > 100000) {
-        return res.status(400).json({ message: 'Время приготовления должно быть от 0 до 100000 минут' });
+        return res.status(400).json({ message: 'Время приготовления должно быть от 1 до 100000 минут' });
       }
       if (!Array.isArray(ingredients) || ingredients.length === 0 || ingredients.length > 100) {
         return res.status(400).json({ message: 'Должен быть хотя бы один ингредиент, но не более 100' });
