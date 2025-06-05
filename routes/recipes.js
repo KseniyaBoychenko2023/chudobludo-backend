@@ -215,22 +215,15 @@ router.get('/public', async (req, res) => {
 // Новый маршрут для получения рецепта по ID
 router.get('/:id', auth, async (req, res) => {
     try {
-        console.log(`GET /api/recipes/${req.params.id} - User ID:`, req.user?.id);
-        if (!req.user?.id) {
-            console.log('No user ID in req.user');
-            return res.status(401).json({ message: 'Пользователь не авторизован' });
-        }
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
             console.log(`Invalid recipeId: ${req.params.id}`);
             return res.status(400).json({ message: 'Неверный ID рецепта' });
         }
-
         const recipe = await Recipe.findById(req.params.id);
         if (!recipe) {
             console.log(`Recipe ${req.params.id} not found`);
             return res.status(404).json({ message: 'Рецепт не найден' });
         }
-
         res.json(recipe);
     } catch (err) {
         console.error(`GET /api/recipes/${req.params.id} - Error:`, err.message, err.stack);
