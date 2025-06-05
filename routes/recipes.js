@@ -231,12 +231,6 @@ router.get('/:id', auth, async (req, res) => {
             return res.status(404).json({ message: 'Рецепт не найден' });
         }
 
-        // Проверка прав доступа: автор, админ или опубликованный рецепт
-        if (recipe.author.toString() !== req.user.id && !req.user.isAdmin && recipe.status !== 'published') {
-            console.log(`User ${req.user.id} not authorized to view recipe ${req.params.id}`);
-            return res.status(403).json({ message: 'Вы не можете просматривать этот рецепт' });
-        }
-
         res.json(recipe);
     } catch (err) {
         console.error(`GET /api/recipes/${req.params.id} - Error:`, err.message, err.stack);
