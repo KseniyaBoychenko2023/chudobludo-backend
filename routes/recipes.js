@@ -202,6 +202,16 @@ router.get('/user/:userId', auth, async (req, res) => {
     }
 });
 
+// Публичный роут: возвращает все recipes с status = 'published', авторизация не требуется
+router.get('/public', async (req, res) => {
+  try {
+    const recipes = await Recipe.find({ status: 'published' });
+    res.json(recipes);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Новый маршрут для получения рецепта по ID
 router.get('/:id', auth, async (req, res) => {
     try {
@@ -591,7 +601,5 @@ router.put(
     }
   }
 );
-
-
 
 module.exports = router;
