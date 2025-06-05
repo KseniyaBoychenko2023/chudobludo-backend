@@ -166,7 +166,6 @@ router.post(
     }
 );
 
-// Публичный роут: возвращает все recipes с status = 'published', авторизация не требуется
 router.get('/public', async (req, res) => {
   try {
     const recipes = await Recipe.find({ status: 'published' });
@@ -240,7 +239,6 @@ router.get('/user/:userId', auth, async (req, res) => {
     }
 });
 
-// Новый маршрут для получения рецепта по ID
 router.get('/:id', auth, async (req, res) => {
     try {
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -296,7 +294,6 @@ router.delete('/:id', auth, async (req, res) => {
         }
         await Recipe.deleteOne({ _id: req.params.id });
 
-        // Удаляем ID рецепта из массива createdRecipes пользователя
         await User.findByIdAndUpdate(
             req.user.id,
             { $pull: { createdRecipes: req.params.id } },
@@ -383,14 +380,12 @@ router.put('/:id/reject', auth, async (req, res) => {
 
 router.put('/:id/reconsider', auth, async (req, res) => {
   try {
-    // 1) Проверяем, что пользователь авторизован и является админом:
     if (!req.user?.id) {
       return res.status(401).json({ message: 'Пользователь не авторизован' });
     }
     if (!req.user.isAdmin) {
       return res.status(403).json({ message: 'Только администратор может "повторно отправить на рассмотрение"' });
     }
-    // 2) Проверяем валидность ID и находим рецепт:
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ message: 'Неверный ID рецепта' });
     }
@@ -398,11 +393,9 @@ router.put('/:id/reconsider', auth, async (req, res) => {
     if (!recipe) {
       return res.status(404).json({ message: 'Рецепт не найден' });
     }
-    // 3) Если сейчас статус != 'rejected', нельзя «возвращать на рассмотрение»:
     if (recipe.status !== 'rejected') {
       return res.status(400).json({ message: 'Нельзя повторно отправить на рассмотрение рецепт со статусом "' + recipe.status + '"' });
     }
-    // 4) Меняем статус:
     recipe.status = 'pending';
     await recipe.save();
     return res.json({ message: 'Рецепт возвращён на рассмотрение', recipe });
@@ -423,8 +416,6 @@ router.put(
   async (req, res) => {
     try {
       console.log(`PUT /api/recipes/${req.params.id} - User ID:`, req.user?.id);
-
-      // 1) Проверка авторизации + существования рецепта
       if (!req.user?.id) {
         return res.status(401).json({ message: 'Пользователь не авторизован' });
       }
@@ -438,8 +429,6 @@ router.put(
       if (recipe.author.toString() !== req.user.id && !req.user.isAdmin) {
         return res.status(403).json({ message: 'Вы не можете редактировать этот рецепт' });
       }
-
-      // 2) Парсим данные из req.body.recipeData
       let recipeData = req.body.recipeData;
       if (!recipeData) {
         return res.status(400).json({ message: 'Данные рецепта отсутствуют' });
@@ -464,8 +453,6 @@ router.put(
         steps,
         removeRecipeImage
       } = recipeData;
-
-      // 3) Валидация полей (всё как у вас было, но без дублирования)
       if (!title || title.length > 50) {
         return res.status(400).json({ message: 'Название рецепта должно быть от 1 до 50 символов' });
       }
@@ -524,8 +511,6 @@ router.put(
           });
         }
       }
-
-      // 4) Обновляем основные поля в объекте recipe:
       recipe.title = title;
       recipe.categories = categories;
       recipe.description = description;
@@ -534,16 +519,11 @@ router.put(
       recipe.ingredients = ingredients;
       recipe.ingredientQuantities = ingredientQuantities;
       recipe.ingredientUnits = ingredientUnits;
-
-      // 5) Если пришёл флаг removeRecipeImage=true, убираем старую картинку:
       if (removeRecipeImage && recipe.image) {
-        // Парсим publicId («имя без расширения») и удаляем из Cloudinary
         const publicId = recipe.image.split('/').pop().split('.')[0];
         await cloudinary.uploader.destroy(`recipes/${publicId}`);
         recipe.image = '';
       }
-
-      // 6) Если пришёл новый файл recipeImage, загружаем его и удаляем старый:
       if (req.files && req.files.recipeImage && req.files.recipeImage[0]) {
         if (recipe.image) {
           const oldPublicId = recipe.image.split('/').pop().split('.')[0];
@@ -560,11 +540,7 @@ router.put(
         });
         recipe.image = uploadResult.secure_url;
       }
-
-      // 7) Подготовка массива для новых URL картинок шагов
       const stepImageUrls = Array(steps.length).fill('');
-
-      // 8) Если пришли файлы шагов, загружаем их в том порядке, в каком их передали в FormData:
       if (req.files && req.files['step-image']) {
         await Promise.all(
             req.files['step-image'].map((file, idx) => 
@@ -585,18 +561,11 @@ router.put(
             )
         );
     }
-
-      // 9) Составляем окончательный массив recipe.steps:
       recipe.steps = steps.map((step, index) => ({
         description: step.description,
         image:
-          // приоритет: 1) новая картинка из stepImageUrls[index]
-          //            2) старая картинка recipe.steps[index].image (если её не удалили)
-          //            3) пустая строка
           stepImageUrls[index] || (recipe.steps[index]?.image || '')
       }));
-
-      // 10) Если текущий пользователь — не админ, сбрасываем статус на «pending»:
       if (!req.user.isAdmin) {
         recipe.status = 'pending';
       }

@@ -11,13 +11,13 @@ module.exports = function (req, res, next) {
         const token = authHeader.replace('Bearer ', '');
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         console.log('Auth middleware - Decoded:', decoded);
-        if (!decoded.user?.id) { // Извлекаем user.id
+        if (!decoded.user?.id) {
             console.log('Auth middleware - No user ID in decoded token');
             return res.status(401).json({ message: 'Неверный токен' });
         }
         req.user = { 
             id: decoded.user.id,
-            isAdmin: decoded.user.isAdmin || false // Извлекаем isAdmin из токена
+            isAdmin: decoded.user.isAdmin || false
         };
         next();
     } catch (err) {

@@ -20,7 +20,6 @@ router.get('/:id/recipes', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    // Разрешаем доступ либо самому пользователю, либо администратору
     if (req.user.id !== req.params.id && !req.user.isAdmin) {
       console.log(`Access denied for user ${req.user.id} (isAdmin: ${req.user.isAdmin}) to fetch user ${req.params.id}`);
       return res.status(403).json({ message: 'Доступ запрещён' });
@@ -29,7 +28,6 @@ router.get('/:id', auth, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
-    // Подсчитываем только опубликованные рецепты
     const publishedRecipesCount = await Recipe.countDocuments({
       _id: { $in: user.createdRecipes },
       status: 'published'
@@ -68,31 +66,20 @@ router.get('/:id/favorites', auth, async (req, res) => {
   }
 });
 
-// --------------------------------------------------
-// Добавить рецепт в избранное: PUT /api/users/:id/favorites/:recipeId
-// --------------------------------------------------
 router.put('/:id/favorites/:recipeId', auth, async (req, res) => {
   try {
     const userId   = req.params.id;
     const recipeId = req.params.recipeId;
-
-    // 1) Проверяем, что текущий пользователь либо тот же, либо админ
     if (req.user.id !== userId && !req.user.isAdmin) {
       return res.status(403).json({ message: 'Доступ запрещён' });
     }
-
-    // 2) Проверяем корректность ObjectId
     if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(recipeId)) {
       return res.status(400).json({ message: 'Неверный ID пользователя или рецепта' });
     }
-
-    // 3) Убедимся, что рецепт существует и статус = published
     const recipe = await Recipe.findById(recipeId);
     if (!recipe || recipe.status !== 'published') {
       return res.status(404).json({ message: 'Рецепт не найден или не опубликован' });
     }
-
-    // 4) Добавляем в favorites, если ещё нет
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: 'Пользователь не найден' });
@@ -113,15 +100,10 @@ router.put('/:id/favorites/:recipeId', auth, async (req, res) => {
   }
 });
 
-// --------------------------------------------------
-// Убрать рецепт из избранного: DELETE /api/users/:id/favorites/:recipeId
-// --------------------------------------------------
 router.delete('/:id/favorites/:recipeId', auth, async (req, res) => {
   try {
     const userId   = req.params.id;
     const recipeId = req.params.recipeId;
-
-    // 1) Проверяем права (тот же пользователь или админ)
     if (req.user.id !== userId && !req.user.isAdmin) {
       return res.status(403).json({ message: 'Доступ запрещён' });
     }
@@ -134,8 +116,6 @@ router.delete('/:id/favorites/:recipeId', auth, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
-
-    // 2) Проверяем, что рецепт действительно в массиве favorites
     const index = user.favorites.findIndex(favId => favId.toString() === recipeId);
     if (index === -1) {
       return res.status(400).json({ message: 'Рецепт не найден в избранном' });
@@ -151,14 +131,9 @@ router.delete('/:id/favorites/:recipeId', auth, async (req, res) => {
   }
 });
 
-// --------------------------------------------------
-// Получить количество избранных: GET /api/users/:id/favorites/count
-// --------------------------------------------------
 router.get('/:id/favorites/count', auth, async (req, res) => {
   try {
     const userId = req.params.id;
-
-    // Проверяем права: либо сам пользователь, либо админ
     if (req.user.id !== userId && !req.user.isAdmin) {
       return res.status(403).json({ message: 'Доступ запрещён' });
     }
