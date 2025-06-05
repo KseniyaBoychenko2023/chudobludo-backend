@@ -166,6 +166,28 @@ router.post(
     }
 );
 
+// Публичный роут: возвращает все recipes с status = 'published', авторизация не требуется
+router.get('/public', async (req, res) => {
+  try {
+    const recipes = await Recipe.find({ status: 'published' });
+    res.json(recipes);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/public/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('username');
+    if (!user) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+    res.json({ username: user.username });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.get('/user/all', auth, async (req, res) => {
     try {
         console.log(`GET /api/recipes/user/all - Author ID:`, req.user?.id);
@@ -200,16 +222,6 @@ router.get('/user/:userId', auth, async (req, res) => {
         console.error('GET /api/recipes/user - Error:', err.message, err.stack);
         res.status(500).json({ message: err.message });
     }
-});
-
-// Публичный роут: возвращает все recipes с status = 'published', авторизация не требуется
-router.get('/public', async (req, res) => {
-  try {
-    const recipes = await Recipe.find({ status: 'published' });
-    res.json(recipes);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
 });
 
 // Новый маршрут для получения рецепта по ID
