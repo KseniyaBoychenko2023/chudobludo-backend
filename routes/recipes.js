@@ -188,6 +188,22 @@ router.get('/public/:id', async (req, res) => {
   }
 });
 
+router.get('/public/recipe/:id', async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Неверный ID рецепта' });
+    }
+    const recipe = await Recipe.findById(req.params.id);
+    if (!recipe || recipe.status !== 'published') {
+      return res.status(404).json({ message: 'Рецепт не найден или не опубликован' });
+    }
+    res.json(recipe);
+  } catch (err) {
+    console.error(`GET /api/recipes/public/recipe/${req.params.id} - Error:`, err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.get('/user/all', auth, async (req, res) => {
     try {
         console.log(`GET /api/recipes/user/all - Author ID:`, req.user?.id);
