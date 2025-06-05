@@ -28,13 +28,39 @@ router.get('/:id', auth, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
-    return res.json({ username: user.username, email: user.email, recipeCount: user.createdRecipes.length, favoritesCount: user.favorites.length, isAdmin: user.isAdmin });
+    return res.json({
+       username: user.username, 
+       email: user.email, 
+       recipeCount: user.createdRecipes.length, 
+       favoritesCount: user.favorites.length, 
+       favorites: user.favorites, 
+       isAdmin: user.isAdmin 
+    });
   } catch (err) {
     console.error('GET /api/users/:id — Error:', err.message);
     return res.status(500).json({ message: 'Ошибка сервера' });
   }
 });
 
+router.get('/:id/favorites', auth, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    if (req.user.id !== userId && !req.user.isAdmin) {
+      return res.status(403).json({ message: 'Доступ запрещён' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Неверный ID пользователя' });
+    }
+    const user = await User.findById(userId).populate('favorites');
+    if (!user) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+    return res.json(user.favorites);
+  } catch (err) {
+    console.error('GET /api/users/:id/favorites — Error:', err);
+    return res.status(500).json({ message: 'Внутренняя ошибка сервера' });
+  }
+});
 
 // --------------------------------------------------
 // Добавить рецепт в избранное: PUT /api/users/:id/favorites/:recipeId

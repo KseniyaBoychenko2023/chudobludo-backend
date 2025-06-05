@@ -9,7 +9,6 @@ module.exports = function (req, res, next) {
             return res.status(401).json({ message: 'Токен не предоставлен' });
         }
         const token = authHeader.replace('Bearer ', '');
-        console.log('Auth middleware - Token:', token);
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         console.log('Auth middleware - Decoded:', decoded);
         if (!decoded.user?.id) { // Извлекаем user.id
