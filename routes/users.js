@@ -28,10 +28,15 @@ router.get('/:id', auth, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
+    // Подсчитываем только опубликованные рецепты
+    const publishedRecipesCount = await Recipe.countDocuments({
+      _id: { $in: user.createdRecipes },
+      status: 'published'
+    });
     return res.json({
        username: user.username, 
        email: user.email, 
-       recipeCount: user.createdRecipes.length, 
+       recipeCount: publishedRecipesCount, 
        favoritesCount: user.favorites.length, 
        favorites: user.favorites, 
        isAdmin: user.isAdmin 
