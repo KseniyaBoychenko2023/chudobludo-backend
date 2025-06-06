@@ -299,6 +299,12 @@ router.delete('/:id', auth, async (req, res) => {
             { $pull: { createdRecipes: req.params.id } },
             { new: true }
         );
+
+        await User.updateMany(
+            { favorites: req.params.id },
+            { $pull: { favorites: req.params.id } }
+        );
+
         console.log(`Recipe ${req.params.id} removed from user's createdRecipes`);
 
         console.log(`Recipe ${req.params.id} deleted`);
